@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "jp-tools"
+version = "0.1.0"
+description = "Composable Japanese-learning tools: YouTube mining, transcription, and Anki deck creation."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fugashi>=1.3.0",
+    "unidic-lite>=1.0.8",
+    "jaconv>=0.3.4",
+    "genanki>=0.13.0",
+    "pandas>=2.0.0",
+]
+
+[project.optional-dependencies]
+# Automatic speech recognition (kotoba-whisper). Multi-GB download.
+transcribe = [
+    "torch>=2.0.0",
+    "transformers>=4.40.0",
+    "accelerate>=0.27.0",
+]
+
+[project.scripts]
+jp-pipeline     = "jp_tools.cli.pipeline:main"
+jp-anki         = "jp_tools.cli.anki:main"
+jp-youtube-anki = "jp_tools.cli.youtube_anki:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/jp_tools"]
