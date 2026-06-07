@@ -13,6 +13,7 @@ wheels/
 segments/
 output.csv
 *.apkg
+tests/integration_data/
 
 # User-supplied dictionaries (large ZIPs)
 dicts/

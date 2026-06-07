@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-WORDS_CSV = Path(__file__).parent / "words.csv"
+WORDS_CSV = Path(__file__).parent / "fixtures" / "words.csv"
 
 
 # --- pure building-block helpers -------------------------------------------

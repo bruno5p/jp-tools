@@ -23,6 +23,9 @@ transcribe = [
     "transformers>=4.40.0",
     "accelerate>=0.27.0",
 ]
+dev = [
+    "pytest==9.0.3",
+]
 
 [project.scripts]
 jp-pipeline     = "jp_tools.cli.pipeline:main"

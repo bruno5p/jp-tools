@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-FIXTURES = Path(__file__).parent
+FIXTURES = Path(__file__).parent / "fixtures"
 
 _SRT = {
     "13m38s": "1\n00:00:00,000 --> 00:00:05,000\nああ忘れ物しちゃったな\n",
