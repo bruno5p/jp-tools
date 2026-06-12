@@ -25,8 +25,10 @@ class YoutubeCreateAnkiPipeline(Pipeline):
         ffmpeg: str | None = None,
         model: str = DEFAULT_ASR_MODEL,
         device: str | None = None,
+        daijirin: str | None = None,
+        daijisen: str | None = None,
         jmdict: str | None = None,
-        kanjium: str | None = None,
+        pitch: str | None = None,
         freq: str | None = None,
     ):
         self.transcribe = YoutubeTranscribePipeline(
@@ -41,8 +43,10 @@ class YoutubeCreateAnkiPipeline(Pipeline):
         )
         self.output = output
         self.deck_name = deck_name
+        self.daijirin = daijirin
+        self.daijisen = daijisen
         self.jmdict = jmdict
-        self.kanjium = kanjium
+        self.pitch = pitch
         self.freq = freq
 
     def run(self) -> str:
@@ -51,8 +55,10 @@ class YoutubeCreateAnkiPipeline(Pipeline):
             csv_path,
             output=self.output,
             deck_name=self.deck_name,
+            daijirin=self.daijirin,
+            daijisen=self.daijisen,
             jmdict=self.jmdict,
-            kanjium=self.kanjium,
+            pitch=self.pitch,
             freq=self.freq,
         )
         return anki.run()
