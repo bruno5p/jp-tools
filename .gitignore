@@ -17,3 +17,7 @@ tests/integration_data/
 
 # User-supplied dictionaries (large ZIPs)
 dicts/
+
+.env
+
+*playground.ipynb
