@@ -11,6 +11,7 @@ class DictResult:
     definitions: list[str]
     pos: list[str]
     pitch_position: int | None
+    pitch_category: str | None  # "heiban" | "atamadaka" | "nakadaka" | "odaka" | None
     frequency: int | None
 
 
@@ -73,51 +74,86 @@ def _load_meta_banks(zf: zipfile.ZipFile) -> dict:
     return meta
 
 
+def _count_morae(reading: str) -> int:
+    digraph_second = set("ぁぃぅぇぉゃゅょァィゥェォャュョ")
+    count, i = 0, 0
+    while i < len(reading):
+        i += 2 if i + 1 < len(reading) and reading[i + 1] in digraph_second else 1
+        count += 1
+    return count
+
+
+def _get_pitch_category(position: int | None, reading: str) -> str | None:
+    if position is None:
+        return None
+    n = _count_morae(reading)
+    if position == 0:
+        return "heiban"
+    if position == 1:
+        return "atamadaka"
+    if n > 0 and position == n:
+        return "odaka"
+    return "nakadaka"
+
+
 class DictionarySet:
-    def __init__(self, jmdict_zip: str, kanjium_zip: str | None = None, freq_zip: str | None = None):
-        print("Loading JMdict/Jitendex dictionary...", file=sys.stderr)
-        with zipfile.ZipFile(jmdict_zip) as zf:
-            self._terms = _load_term_banks(zf)
-            self._jmdict_meta = _load_meta_banks(zf)
+    def __init__(
+        self,
+        def_zips: list[str],
+        pitch_zip: str | None = None,
+        freq_zip: str | None = None,
+    ):
+        self._term_banks: list[dict] = []
+        for path in def_zips:
+            print(f"Loading dictionary: {path}", file=sys.stderr)
+            with zipfile.ZipFile(path) as zf:
+                self._term_banks.append(_load_term_banks(zf))
 
         self._pitch_meta: dict[str, list] = {}
-        if kanjium_zip:
-            print("Loading pitch accent dictionary...", file=sys.stderr)
-            with zipfile.ZipFile(kanjium_zip) as zf:
-                self._pitch_meta = _load_meta_banks(zf)
+        if pitch_zip:
+            print(f"Loading pitch accent dictionary: {pitch_zip}", file=sys.stderr)
+            try:
+                with zipfile.ZipFile(pitch_zip) as zf:
+                    self._pitch_meta = _load_meta_banks(zf)
+            except Exception as e:
+                print(f"  WARNING: could not load pitch dict: {e}", file=sys.stderr)
 
         self._freq_meta: dict[str, list] = {}
         if freq_zip:
-            print("Loading frequency dictionary...", file=sys.stderr)
+            print(f"Loading frequency dictionary: {freq_zip}", file=sys.stderr)
             with zipfile.ZipFile(freq_zip) as zf:
                 self._freq_meta = _load_meta_banks(zf)
 
-        print(f"Dictionaries loaded: {len(self._terms):,} terms.", file=sys.stderr)
+        total = sum(len(b) for b in self._term_banks)
+        print(f"Dictionaries loaded: {total:,} terms across {len(self._term_banks)} dict(s).", file=sys.stderr)
 
     def lookup(self, lemma: str) -> DictResult | None:
-        entries = self._terms.get(lemma, [])
-        if not entries:
-            return None
+        for terms in self._term_banks:
+            entries = terms.get(lemma, [])
+            if not entries:
+                continue
+            best = max(entries, key=lambda e: e[4])
+            expression = best[0]
+            reading = best[1]
+            def_tags = best[2] or ""
+            raw_defs = best[5]
+            pos = [t.strip() for t in def_tags.split() if t.strip()]
+            definitions = _extract_text(raw_defs) if isinstance(raw_defs, list) else [str(raw_defs)]
 
-        best = max(entries, key=lambda e: e[4])  # sort by score (index 4)
-        expression = best[0]
-        reading = best[1]
-        def_tags = best[2] or ""
-        raw_defs = best[5]
-        pos = [t.strip() for t in def_tags.split() if t.strip()]
-        definitions = _extract_text(raw_defs) if isinstance(raw_defs, list) else [str(raw_defs)]
+            pitch_position = self._get_pitch(lemma, reading)
+            pitch_category = _get_pitch_category(pitch_position, reading)
+            frequency = self._get_frequency(lemma, reading)
 
-        pitch_position = self._get_pitch(lemma, reading)
-        frequency = self._get_frequency(lemma, reading)
-
-        return DictResult(
-            expression=expression,
-            reading=reading,
-            definitions=definitions,
-            pos=pos,
-            pitch_position=pitch_position,
-            frequency=frequency,
-        )
+            return DictResult(
+                expression=expression,
+                reading=reading,
+                definitions=definitions,
+                pos=pos,
+                pitch_position=pitch_position,
+                pitch_category=pitch_category,
+                frequency=frequency,
+            )
+        return None
 
     def _get_pitch(self, lemma: str, reading: str) -> int | None:
         for entry in self._pitch_meta.get(lemma, []):
@@ -156,11 +192,9 @@ class DictionarySet:
         return None
 
 
-_cache: DictionarySet | None = None
-
-
-def get_dict(jmdict_zip: str, kanjium_zip: str | None = None, freq_zip: str | None = None) -> DictionarySet:
-    global _cache
-    if _cache is None:
-        _cache = DictionarySet(jmdict_zip, kanjium_zip, freq_zip)
-    return _cache
+def get_dict(
+    def_zips: list[str],
+    pitch_zip: str | None = None,
+    freq_zip: str | None = None,
+) -> DictionarySet:
+    return DictionarySet(def_zips, pitch_zip=pitch_zip, freq_zip=freq_zip)
