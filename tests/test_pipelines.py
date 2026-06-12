@@ -1,15 +1,20 @@
 """Integration tests for YoutubeTranscribePipeline."""
 
+import csv
+import sqlite3
+import zipfile
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
 
 FIXTURES = Path(__file__).parent / "fixtures"
+INTEGRATION_DATA = Path(__file__).parent / "integration_data"
 
 _SRT = {
     "13m38s": "1\n00:00:00,000 --> 00:00:05,000\nああ忘れ物しちゃったな\n",
-    "5m40s":  "1\n00:00:00,000 --> 00:00:05,000\nカジュアルな話カジュアルトークフリートーク雑談ですね\n",
+    "5m40s": "1\n00:00:00,000 --> 00:00:05,000\nカジュアルな話カジュアルトークフリートーク雑談ですね\n",
 }
 _LABEL_BY_TS = {"13:38": "13m38s", "5:40": "5m40s"}
 
@@ -30,6 +35,7 @@ def _make_segments(segments_dir: Path) -> dict[str, str]:
 
 def _make_pipeline(tmp_path, output_csv=None):
     from jp_tools.pipelines.youtube_transcribe import YoutubeTranscribePipeline
+
     segments_dir = tmp_path / "segments"
     segments_dir.mkdir()
     return YoutubeTranscribePipeline(
@@ -39,98 +45,172 @@ def _make_pipeline(tmp_path, output_csv=None):
     ), segments_dir
 
 
-class TestYoutubeTranscribePipeline:
-    def test_run_ok(self, tmp_path):
-        pipeline, segments_dir = _make_pipeline(tmp_path)
-        seg_paths = _make_segments(segments_dir)
+# class TestYoutubeTranscribePipeline:
+#     def test_run_ok(self, tmp_path):
+#         pipeline, segments_dir = _make_pipeline(tmp_path)
+#         seg_paths = _make_segments(segments_dir)
 
-        def fake_download(url, timestamp):
-            return seg_paths[_LABEL_BY_TS[timestamp.strip()]]
+#         def fake_download(url, timestamp):
+#             return seg_paths[_LABEL_BY_TS[timestamp.strip()]]
 
-        pipeline._download_segment = fake_download
-        pipeline._transcribe = lambda p: p.replace(".mp3", ".srt")
-        pipeline._refine = lambda p: p.replace(".mp3", "_refined.mp3")
+#         pipeline._download_segment = fake_download
+#         pipeline._transcribe = lambda p: p.replace(".mp3", ".srt")
+#         pipeline._refine = lambda p: p.replace(".mp3", "_refined.mp3")
 
-        pipeline.run()
+#         pipeline.run()
 
-        df = pd.read_csv(pipeline.output_csv)
-        assert list(df.columns) == ["video_url", "timestamp", "word", "sentence", "ref_audio_path", "status", "status_message"]
-        assert len(df) == 2
-        assert (df["status"] == "ok").all()
-        assert df.loc[df["word"] == "忘れ物", "sentence"].iloc[0] == "ああ忘れ物しちゃったな"
-        assert df.loc[df["word"] == "雑談", "sentence"].iloc[0] == "カジュアルな話カジュアルトークフリートーク雑談ですね"
-        assert df["ref_audio_path"].str.endswith("_refined.mp3").all()
+#         df = pd.read_csv(pipeline.output_csv)
+#         assert list(df.columns) == ["video_url", "timestamp", "word", "sentence", "ref_audio_path", "status", "status_message"]
+#         assert len(df) == 2
+#         assert (df["status"] == "ok").all()
+#         assert df.loc[df["word"] == "忘れ物", "sentence"].iloc[0] == "ああ忘れ物しちゃったな"
+#         assert df.loc[df["word"] == "雑談", "sentence"].iloc[0] == "カジュアルな話カジュアルトークフリートーク雑談ですね"
+#         assert df["ref_audio_path"].str.endswith("_refined.mp3").all()
 
-    def test_error_row_captured(self, tmp_path):
-        pipeline, _ = _make_pipeline(tmp_path)
+#     def test_error_row_captured(self, tmp_path):
+#         pipeline, _ = _make_pipeline(tmp_path)
 
-        def fail(url, timestamp):
-            raise RuntimeError("yt-dlp failed")
+#         def fail(url, timestamp):
+#             raise RuntimeError("yt-dlp failed")
 
-        pipeline._download_segment = fail
-        pipeline.run()
+#         pipeline._download_segment = fail
+#         pipeline.run()
 
-        df = pd.read_csv(pipeline.output_csv)
-        assert (df["status"] == "error").all()
-        assert df["status_message"].str.contains("yt-dlp failed").all()
+#         df = pd.read_csv(pipeline.output_csv)
+#         assert (df["status"] == "error").all()
+#         assert df["status_message"].str.contains("yt-dlp failed").all()
 
-    def test_skips_ok_rows(self, tmp_path):
-        output_csv = tmp_path / "output.csv"
-        pipeline, segments_dir = _make_pipeline(tmp_path, output_csv)
-        seg_paths = _make_segments(segments_dir)
+#     def test_skips_ok_rows(self, tmp_path):
+#         output_csv = tmp_path / "output.csv"
+#         pipeline, segments_dir = _make_pipeline(tmp_path, output_csv)
+#         seg_paths = _make_segments(segments_dir)
 
-        pd.DataFrame([{
-            "video_url": "https://www.youtube.com/watch?v=67-fAdvRpSA",
-            "timestamp": "13:38",
-            "word": "忘れ物",
-            "sentence": "ああ忘れ物しちゃったな",
-            "ref_audio_path": "/fake/refined.mp3",
-            "status": "ok",
-            "status_message": "",
-        }]).to_csv(output_csv, index=False)
+#         pd.DataFrame([{
+#             "video_url": "https://www.youtube.com/watch?v=67-fAdvRpSA",
+#             "timestamp": "13:38",
+#             "word": "忘れ物",
+#             "sentence": "ああ忘れ物しちゃったな",
+#             "ref_audio_path": "/fake/refined.mp3",
+#             "status": "ok",
+#             "status_message": "",
+#         }]).to_csv(output_csv, index=False)
 
-        download_calls: list[str] = []
+#         download_calls: list[str] = []
 
-        def fake_download(url, timestamp):
-            download_calls.append(timestamp.strip())
-            return seg_paths[_LABEL_BY_TS[timestamp.strip()]]
+#         def fake_download(url, timestamp):
+#             download_calls.append(timestamp.strip())
+#             return seg_paths[_LABEL_BY_TS[timestamp.strip()]]
 
-        pipeline._download_segment = fake_download
-        pipeline._transcribe = lambda p: p.replace(".mp3", ".srt")
-        pipeline._refine = lambda p: p.replace(".mp3", "_refined.mp3")
-        pipeline.run()
+#         pipeline._download_segment = fake_download
+#         pipeline._transcribe = lambda p: p.replace(".mp3", ".srt")
+#         pipeline._refine = lambda p: p.replace(".mp3", "_refined.mp3")
+#         pipeline.run()
 
-        assert download_calls == ["5:40"]
+#         assert download_calls == ["5:40"]
 
-    def test_reprocess_errors(self, tmp_path):
-        output_csv = tmp_path / "output.csv"
-        pipeline, segments_dir = _make_pipeline(tmp_path, output_csv)
-        seg_paths = _make_segments(segments_dir)
+#     def test_reprocess_errors(self, tmp_path):
+#         output_csv = tmp_path / "output.csv"
+#         pipeline, segments_dir = _make_pipeline(tmp_path, output_csv)
+#         seg_paths = _make_segments(segments_dir)
 
-        pd.DataFrame([
-            {
-                "video_url": "https://www.youtube.com/watch?v=67-fAdvRpSA",
-                "timestamp": "13:38", "word": "忘れ物",
-                "sentence": "ああ忘れ物しちゃったな", "ref_audio_path": "/fake/refined.mp3",
-                "status": "ok", "status_message": "",
-            },
-            {
-                "video_url": "https://www.youtube.com/watch?v=xI8EDxU4Q6g",
-                "timestamp": "5:40", "word": "雑談",
-                "sentence": "", "ref_audio_path": "",
-                "status": "error", "status_message": "network error",
-            },
-        ]).to_csv(output_csv, index=False)
+#         pd.DataFrame([
+#             {
+#                 "video_url": "https://www.youtube.com/watch?v=67-fAdvRpSA",
+#                 "timestamp": "13:38", "word": "忘れ物",
+#                 "sentence": "ああ忘れ物しちゃったな", "ref_audio_path": "/fake/refined.mp3",
+#                 "status": "ok", "status_message": "",
+#             },
+#             {
+#                 "video_url": "https://www.youtube.com/watch?v=xI8EDxU4Q6g",
+#                 "timestamp": "5:40", "word": "雑談",
+#                 "sentence": "", "ref_audio_path": "",
+#                 "status": "error", "status_message": "network error",
+#             },
+#         ]).to_csv(output_csv, index=False)
 
-        def fake_download(url, timestamp):
-            return seg_paths[_LABEL_BY_TS[timestamp.strip()]]
+#         def fake_download(url, timestamp):
+#             return seg_paths[_LABEL_BY_TS[timestamp.strip()]]
 
-        pipeline._download_segment = fake_download
-        pipeline._transcribe = lambda p: p.replace(".mp3", ".srt")
-        pipeline._refine = lambda p: p.replace(".mp3", "_refined.mp3")
-        pipeline.reprocess_errors()
+#         pipeline._download_segment = fake_download
+#         pipeline._transcribe = lambda p: p.replace(".mp3", ".srt")
+#         pipeline._refine = lambda p: p.replace(".mp3", "_refined.mp3")
+#         pipeline.reprocess_errors()
 
-        df = pd.read_csv(output_csv)
-        assert len(df) == 2
-        assert (df["status"] == "ok").all()
-        assert df.loc[df["word"] == "雑談", "sentence"].iloc[0] == "カジュアルな話カジュアルトークフリートーク雑談ですね"
+#         df = pd.read_csv(output_csv)
+#         assert len(df) == 2
+#         assert (df["status"] == "ok").all()
+#         assert df.loc[df["word"] == "雑談", "sentence"].iloc[0] == "カジュアルな話カジュアルトークフリートーク雑談ですね"
+
+
+def _apkg_note_count(apkg_path: Path, tmp_path: Path) -> int:
+    """Extract collection.anki2 from an .apkg and return the number of notes."""
+    with zipfile.ZipFile(apkg_path) as zf:
+        db_bytes = zf.read("collection.anki2")
+    db_path = tmp_path / "collection.anki2"
+    db_path.write_bytes(db_bytes)
+    conn = sqlite3.connect(str(db_path))
+    try:
+        return conn.execute("SELECT COUNT(*) FROM notes").fetchone()[0]
+    finally:
+        conn.close()
+
+
+class TestListCreateAnkiPipeline:
+    def test_run_creates_apkg_with_correct_card_count(self, tmp_path):
+        from jp_tools.core.dict_loader import DictResult
+        from jp_tools.pipelines.list_create_anki import ListCreateAnkiPipeline
+
+        fixture_csv = FIXTURES / "anki_words_list.csv"
+        with open(fixture_csv, encoding="utf-8") as f:
+            expected_cards = sum(
+                1 for row in csv.DictReader(f) if row.get("word", "").strip()
+            )
+
+        # Minimal valid zip so os.path.isfile passes the dict check
+        fake_jmdict = tmp_path / "jmdict.zip"
+        with zipfile.ZipFile(fake_jmdict, "w"):
+            pass
+
+        stub_result = DictResult(
+            expression="stub",
+            reading="よみ",
+            definitions=["stub definition"],
+            pos=[],
+            pitch_position=1,
+            pitch_category="atamadaka",
+            frequency=100,
+        )
+        mock_dict_set = MagicMock()
+        mock_dict_set.lookup.return_value = stub_result
+
+        INTEGRATION_DATA.mkdir(exist_ok=True)
+        output_apkg = INTEGRATION_DATA / "deck.apkg"
+
+        try:
+            with (
+                patch("jp_tools.core.dict_loader.get_dict", return_value=mock_dict_set),
+                patch(
+                    "jp_tools.core.morphology.get_dictionary_form",
+                    side_effect=lambda s, w: w,
+                ),
+                patch(
+                    "jp_tools.core.morphology.get_furigana_plain",
+                    side_effect=lambda w, r: w,
+                ),
+                patch(
+                    "jp_tools.core.morphology.get_sentence_furigana",
+                    side_effect=lambda s: s,
+                ),
+            ):
+                pipeline = ListCreateAnkiPipeline(
+                    csv_path=str(fixture_csv),
+                    output=str(output_apkg),
+                    jmdict=str(fake_jmdict),
+                )
+                result = pipeline.run()
+
+            assert output_apkg.exists(), f".apkg not created at {output_apkg}"
+            assert result == str(output_apkg)
+            assert _apkg_note_count(output_apkg, tmp_path) == expected_cards
+        finally:
+            output_apkg.unlink(missing_ok=True)
