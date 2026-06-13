@@ -7,8 +7,9 @@ High-level orchestration lives in :mod:`jp_tools.pipelines`.
 __version__ = "0.1.0"
 
 from .pipelines import (  # noqa: E402
-    ListCreateAnkiPipeline,
+    AnkiCardData,
     Pipeline,
+    PipelineAnkiFromList,
     YoutubeCreateAnkiPipeline,
     YoutubeTranscribePipeline,
 )
@@ -16,7 +17,8 @@ from .pipelines import (  # noqa: E402
 __all__ = [
     "__version__",
     "Pipeline",
+    "AnkiCardData",
     "YoutubeTranscribePipeline",
-    "ListCreateAnkiPipeline",
+    "PipelineAnkiFromList",
     "YoutubeCreateAnkiPipeline",
 ]

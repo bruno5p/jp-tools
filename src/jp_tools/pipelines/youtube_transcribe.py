@@ -1,13 +1,16 @@
+import json
 import os
 import re
+from datetime import datetime
 
 import pandas as pd
 
 from .base import Pipeline
+from .models import AnkiCardData
 
 DEFAULT_ASR_MODEL = "kotoba-tech/kotoba-whisper-v2.2"
 _PADDING = 0.25
-_OUTPUT_COLS = ["video_url", "timestamp", "word", "sentence", "ref_audio_path", "status", "status_message"]
+_OUTPUT_COLS = list(AnkiCardData.model_fields.keys())
 
 
 class YoutubeTranscribePipeline(Pipeline):
@@ -105,25 +108,28 @@ class YoutubeTranscribePipeline(Pipeline):
         url = str(row["video_url"]).strip()
         timestamp = str(row["timestamp"]).strip()
         word = str(row["word"]).strip()
-        result = {
-            "video_url": url, "timestamp": timestamp, "word": word,
-            "sentence": "", "ref_audio_path": "",
-            "status": "error", "status_message": "",
-        }
+        source_meta = json.dumps({"video_url": url, "timestamp": timestamp})
         try:
             mp3_path = self._download_segment(url, timestamp)
             srt_path = self._transcribe(mp3_path)
             refined_path = self._refine(mp3_path)
             sentence = self._sentence_from_srt(srt_path, word) if os.path.exists(srt_path) else ""
-            result.update({
-                "sentence": sentence,
-                "ref_audio_path": os.path.abspath(refined_path) if os.path.exists(refined_path) else "",
-                "status": "ok",
-                "status_message": "",
-            })
+            return AnkiCardData(
+                added_on=datetime.now(),
+                word=word,
+                sentence=sentence or None,
+                sentence_audio_path=os.path.abspath(refined_path) if os.path.exists(refined_path) else None,
+                source_metadata=source_meta,
+                status="ok",
+            ).to_csv_row()
         except Exception as e:
-            result["status_message"] = str(e)
-        return result
+            return AnkiCardData(
+                added_on=datetime.now(),
+                word=word,
+                source_metadata=source_meta,
+                status="error",
+                status_message=str(e),
+            ).to_csv_row()
 
     # -- public interface -----------------------------------------------------
 
@@ -133,10 +139,14 @@ class YoutubeTranscribePipeline(Pipeline):
         results: list[dict] = []
 
         if os.path.exists(self.output_csv):
-            existing = pd.read_csv(self.output_csv)
+            existing = pd.read_csv(self.output_csv).fillna("")
             ok_rows = existing[existing["status"] == "ok"] if "status" in existing.columns else existing
             for _, r in ok_rows.iterrows():
-                done.add((str(r["video_url"]).strip(), str(r["timestamp"]).strip()))
+                try:
+                    meta = json.loads(r.get("source_metadata", "") or "")
+                except (json.JSONDecodeError, ValueError):
+                    meta = {}
+                done.add((meta.get("video_url", "").strip(), meta.get("timestamp", "").strip()))
                 results.append({col: r.get(col, "") for col in _OUTPUT_COLS})
 
         for _, row in df.iterrows():
@@ -157,7 +167,7 @@ class YoutubeTranscribePipeline(Pipeline):
 
     def reprocess_errors(self) -> str:
         """Reprocess rows with status='error' in the output CSV and save in-place."""
-        existing = pd.read_csv(self.output_csv)
+        existing = pd.read_csv(self.output_csv).fillna("")
         if "status" not in existing.columns:
             print("No 'status' column found — nothing to reprocess.")
             return self.output_csv
@@ -166,7 +176,14 @@ class YoutubeTranscribePipeline(Pipeline):
             print("No error rows to reprocess.")
             return self.output_csv
         for idx, row in existing[error_mask].iterrows():
-            result = self._process_row(row)
+            try:
+                meta = json.loads(row.get("source_metadata", "") or "")
+            except (json.JSONDecodeError, ValueError):
+                meta = {}
+            process_row = dict(row)
+            process_row["video_url"] = meta.get("video_url", "")
+            process_row["timestamp"] = meta.get("timestamp", "")
+            result = self._process_row(process_row)
             for col, val in result.items():
                 if col in existing.columns:
                     existing.at[idx, col] = val

@@ -5,7 +5,7 @@ CSV (word/sentence/audio) → Anki deck (.apkg).
 
 import argparse
 
-from ..pipelines import ListCreateAnkiPipeline
+from ..pipelines import PipelineAnkiFromList
 
 
 def main() -> None:
@@ -35,7 +35,7 @@ def main() -> None:
                         help="Per-request timeout for audio fetching (default: 10)")
     args = parser.parse_args()
 
-    ListCreateAnkiPipeline(
+    PipelineAnkiFromList(
         args.csv,
         output=args.output,
         deck_name=args.deck,

@@ -37,30 +37,23 @@ INTEGRATION_DATA = Path(__file__).parent / "integration_data"
 
 #     df = pd.read_csv(output_csv)
 #     assert len(df) == 2
-#     assert list(df.columns) == [
-#         "video_url",
-#         "timestamp",
-#         "word",
-#         "sentence",
-#         "ref_audio_path",
-#         "status",
-#         "status_message",
-#     ]
+#     from jp_tools.pipelines.models import AnkiCardData
+#     assert list(df.columns) == list(AnkiCardData.model_fields.keys())
 #     assert (df["status"] == "ok").all(), (
 #         f"Some rows failed:\n{df[df['status'] != 'ok'][['word', 'status_message']]}"
 #     )
 #     assert df["sentence"].str.len().gt(0).all(), "Expected non-empty sentences"
-#     assert df["ref_audio_path"].apply(lambda p: Path(p).exists()).all(), (
+#     assert df["sentence_audio_path"].apply(lambda p: Path(p).exists()).all(), (
 #         "Refined audio files not found on disk"
 #     )
 
 
 @pytest.mark.integration
-def test_list_create_anki_pipeline():
+def test_pipeline_anki_from_list():
     """End-to-end: CSV → .apkg using real dictionaries and real morphology (fugashi)."""
     import tempfile
 
-    from jp_tools.pipelines.list_create_anki import ListCreateAnkiPipeline
+    from jp_tools.pipelines.pipeline_anki_list import PipelineAnkiFromList
 
     fixture_csv = FIXTURES / "anki_words_list.csv"
     with open(fixture_csv, encoding="utf-8") as f:
@@ -71,7 +64,7 @@ def test_list_create_anki_pipeline():
     INTEGRATION_DATA.mkdir(exist_ok=True)
     output_apkg = INTEGRATION_DATA / "deck.apkg"
 
-    pipeline = ListCreateAnkiPipeline(
+    pipeline = PipelineAnkiFromList(
         csv_path=str(fixture_csv),
         output=str(output_apkg),
     )

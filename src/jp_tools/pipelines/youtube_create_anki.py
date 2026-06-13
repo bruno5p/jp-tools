@@ -6,7 +6,7 @@ into an .apkg deck).
 """
 
 from .base import Pipeline
-from .list_create_anki import ListCreateAnkiPipeline
+from .pipeline_anki_list import PipelineAnkiFromList
 from .youtube_transcribe import DEFAULT_ASR_MODEL, YoutubeTranscribePipeline
 
 
@@ -55,7 +55,7 @@ class YoutubeCreateAnkiPipeline(Pipeline):
 
     def run(self) -> str:
         csv_path = self.transcribe.run()
-        anki = ListCreateAnkiPipeline(
+        anki = PipelineAnkiFromList(
             csv_path,
             output=self.output,
             deck_name=self.deck_name,

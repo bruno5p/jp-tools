@@ -1,18 +1,14 @@
-"""ListCreateAnkiPipeline: word/sentence CSV → Anki deck (.apkg).
-
-Reads a CSV (columns: video_url, timestamp, word, sentence, ref_audio_path —
-e.g. the output of :class:`YoutubeTranscribePipeline`) and creates one Anki note
-per row using Yomitan-format dictionary data.
-"""
+"""PipelineAnkiFromList: AnkiCardData CSV → Anki deck (.apkg)."""
 
 import csv
 import os
 
 from .base import Pipeline
+from .models import AnkiCardData
 
 
-class ListCreateAnkiPipeline(Pipeline):
-    """Build an Anki .apkg deck from a word list CSV."""
+class PipelineAnkiFromList(Pipeline):
+    """Build an Anki .apkg deck from an AnkiCardData CSV."""
 
     def __init__(
         self,
@@ -63,19 +59,33 @@ class ListCreateAnkiPipeline(Pipeline):
 
         errors = []
         for i, row in enumerate(rows, 1):
-            word = row.get("word", "").strip()
-            sentence = row.get("sentence", "").strip()
-            audio = row.get("ref_audio_path", "").strip()
-            print(f"[{i}/{len(rows)}] {word}")
-            if not word:
+            try:
+                card = AnkiCardData.from_csv_row(row)
+            except Exception as e:
+                print(f"[{i}] SKIP: invalid row — {e}")
+                continue
+
+            print(f"[{i}/{len(rows)}] {card.word}")
+            if not card.word:
                 print("  SKIP: empty word")
                 continue
+
             try:
-                log = creator.add_word(word, sentence, audio)
+                log = creator.add_word(
+                    word=card.word,
+                    sentence=card.sentence or "",
+                    audio=card.sentence_audio_path or "",
+                    word_audio_path=card.word_audio_path,
+                    picture=card.picture_path,
+                    hint=card.hint,
+                    definition_override=card.definition,
+                    definition_picture=card.definition_picture_path,
+                    tags=card.tags,
+                )
                 print(log)
             except Exception as e:
                 print(f"  ERROR: {e}")
-                errors.append(word)
+                errors.append(card.word)
 
         creator.flush(self.output)
 

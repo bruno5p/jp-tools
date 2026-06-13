@@ -155,10 +155,10 @@ def _apkg_note_count(apkg_path: Path, tmp_path: Path) -> int:
         conn.close()
 
 
-class TestListCreateAnkiPipeline:
+class TestPipelineAnkiFromList:
     def test_run_creates_apkg_with_correct_card_count(self, tmp_path):
         from jp_tools.lookup import DictResult
-        from jp_tools.pipelines.list_create_anki import ListCreateAnkiPipeline
+        from jp_tools.pipelines.pipeline_anki_list import PipelineAnkiFromList
 
         fixture_csv = FIXTURES / "anki_words_list.csv"
         with open(fixture_csv, encoding="utf-8") as f:
@@ -180,7 +180,7 @@ class TestListCreateAnkiPipeline:
             frequencies=[("JPDB", 100)],
         )
         mock_dict_set = MagicMock()
-        mock_dict_set.find_term.return_value = stub_result
+        mock_dict_set.find_all_terms.return_value = [stub_result]
 
         INTEGRATION_DATA.mkdir(exist_ok=True)
         output_apkg = INTEGRATION_DATA / "deck.apkg"
@@ -197,7 +197,7 @@ class TestListCreateAnkiPipeline:
                     side_effect=lambda s: s,
                 ),
             ):
-                pipeline = ListCreateAnkiPipeline(
+                pipeline = PipelineAnkiFromList(
                     csv_path=str(fixture_csv),
                     output=str(output_apkg),
                     jmdict=str(fake_jmdict),

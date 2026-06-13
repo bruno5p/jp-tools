@@ -3,16 +3,11 @@ import os
 import re
 import sys
 import tempfile
+import genanki
 from dataclasses import dataclass
 from ._lapis_template import CARD_CSS, RECOGNITION_AFMT, RECOGNITION_QFMT
 from ..lookup import DictResult
 from .._paths import DEFAULT_DICTS_DIR
-
-
-try:
-    import genanki
-except ImportError:
-    sys.exit("Missing dependency: genanki\n  pip install genanki")
 
 
 # Frequency lists shown on each card, in display order. Each is a folder of
@@ -186,7 +181,19 @@ class AnkiCardCreator:
             )
         return self._audio
 
-    def add_word(self, word: str, sentence: str, audio: str) -> str:
+    def add_word(
+        self,
+        word: str,
+        sentence: str,
+        audio: str,
+        *,
+        word_audio_path: str | None = None,
+        picture: str | None = None,
+        hint: str | None = None,
+        definition_override: str | None = None,
+        definition_picture: str | None = None,
+        tags: str | None = None,
+    ) -> str:
         """Look up word, build a note, and add it to the deck. Returns a log line."""
         from ..furigana import get_furigana_plain, get_sentence_furigana
 
@@ -249,6 +256,16 @@ class AnkiCardCreator:
                     self._media.append(path)
                     audio_ok = True
 
+        # Explicit word_audio_path overrides auto-fetch (e.g. pre-recorded audio).
+        if word_audio_path and os.path.isfile(word_audio_path):
+            expression_audio = f"[sound:{os.path.basename(word_audio_path)}]"
+            self._media.append(os.path.abspath(word_audio_path))
+            audio_ok = True
+
+        # Explicit definition overrides dictionary lookup (pitch/freq still auto).
+        if definition_override:
+            main_definition = definition_override
+
         if sentence and word in sentence:
             idx = sentence.index(word)
             bolded = sentence[:idx] + f"<b>{word}</b>" + sentence[idx + len(word) :]
@@ -274,7 +291,14 @@ class AnkiCardCreator:
             freq_sort=freq_sort,
             misc_info="",
         )
-        self.add_note(data, audio_path=audio if audio else None)
+        self.add_note(
+            data,
+            audio_path=audio if audio else None,
+            picture=picture,
+            hint=hint,
+            definition_picture=definition_picture,
+            tags=tags,
+        )
         audio_flag = "✓" if audio_ok else ("✗" if self._word_audio else "-")
         return (
             f"  + {word}  [{expression_reading}]"
@@ -283,7 +307,15 @@ class AnkiCardCreator:
             f"  audio={audio_flag}"
         )
 
-    def add_note(self, data: NoteData, audio_path: str | None = None) -> None:
+    def add_note(
+        self,
+        data: NoteData,
+        audio_path: str | None = None,
+        picture: str | None = None,
+        hint: str | None = None,
+        definition_picture: str | None = None,
+        tags: str | None = None,
+    ) -> None:
         sentence_audio = ""
         if audio_path and os.path.isfile(audio_path):
             filename = os.path.basename(audio_path)
@@ -299,13 +331,13 @@ class AnkiCardCreator:
                 data.expression_audio,
                 "",
                 data.main_definition,
-                "",  # DefinitionPicture
+                definition_picture or "",  # DefinitionPicture
                 data.sentence,
                 data.sentence_furigana,
                 sentence_audio,  # SentenceAudio from audio_path
-                "",  # Picture
+                picture or "",  # Picture
                 data.glossary,
-                "",  # Hint
+                hint or "",  # Hint
                 "",  # IsWordAndSentenceCard
                 "",  # IsClickCard
                 "1",  # IsSentenceCard
@@ -315,6 +347,7 @@ class AnkiCardCreator:
                 data.freq_sort,
                 data.misc_info,
             ],
+            tags=[t.strip() for t in tags.split(",") if t.strip()] if tags else [],
         )
         self._deck.add_note(note)
 

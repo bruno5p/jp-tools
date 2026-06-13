@@ -1,3 +1,3 @@
-video_url,timestamp,word,sentence,ref_audio_path,status,status_message
-https://www.youtube.com/watch?v=67-fAdvRpSA,13:38,忘れ物,ああ忘れ物しちゃったな,C:\Users\Bruno Guerreiro\Documents\Projects\Japanese Tools\jp-tools\tests\integration_data\segments\segment_001_13m38s_refined.mp3,ok,
-https://www.youtube.com/watch?v=xI8EDxU4Q6g,5:40,雑談,カジュアルな話カジュアルトークフリートーク雑談ですね,C:\Users\Bruno Guerreiro\Documents\Projects\Japanese Tools\jp-tools\tests\integration_data\segments\segment_001_5m40s_refined.mp3,ok,
+added_on,word,reading,sentence,word_audio_path,sentence_audio_path,picture_path,definition,definition_picture_path,hint,tags,source_metadata,status,status_message
+2026-06-13T00:00:00,忘れ物,,ああ忘れ物しちゃったな,,C:\Users\Bruno Guerreiro\Documents\Projects\Japanese Tools\jp-tools\tests\integration_data\segments\segment_001_13m38s_refined.mp3,,,,,,,ok,
+2026-06-13T00:00:00,雑談,,カジュアルな話カジュアルトークフリートーク雑談ですね,,C:\Users\Bruno Guerreiro\Documents\Projects\Japanese Tools\jp-tools\tests\integration_data\segments\segment_001_5m40s_refined.mp3,,,,,,,ok,
