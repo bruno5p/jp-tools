@@ -157,7 +157,7 @@ def _apkg_note_count(apkg_path: Path, tmp_path: Path) -> int:
 
 class TestListCreateAnkiPipeline:
     def test_run_creates_apkg_with_correct_card_count(self, tmp_path):
-        from jp_tools.core.dict_loader import DictResult
+        from jp_tools.core.lookup import DictResult
         from jp_tools.pipelines.list_create_anki import ListCreateAnkiPipeline
 
         fixture_csv = FIXTURES / "anki_words_list.csv"
@@ -181,24 +181,20 @@ class TestListCreateAnkiPipeline:
             frequency=100,
         )
         mock_dict_set = MagicMock()
-        mock_dict_set.lookup.return_value = stub_result
+        mock_dict_set.find_term.return_value = stub_result
 
         INTEGRATION_DATA.mkdir(exist_ok=True)
         output_apkg = INTEGRATION_DATA / "deck.apkg"
 
         try:
             with (
-                patch("jp_tools.core.dict_loader.get_dict", return_value=mock_dict_set),
+                patch("jp_tools.core.lookup.get_dict", return_value=mock_dict_set),
                 patch(
-                    "jp_tools.core.morphology.get_dictionary_form",
-                    side_effect=lambda s, w: w,
-                ),
-                patch(
-                    "jp_tools.core.morphology.get_furigana_plain",
+                    "jp_tools.core.furigana.get_furigana_plain",
                     side_effect=lambda w, r: w,
                 ),
                 patch(
-                    "jp_tools.core.morphology.get_sentence_furigana",
+                    "jp_tools.core.furigana.get_sentence_furigana",
                     side_effect=lambda s: s,
                 ),
             ):

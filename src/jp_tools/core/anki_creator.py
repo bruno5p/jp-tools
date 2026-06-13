@@ -111,7 +111,7 @@ class AnkiCardCreator:
         return int.from_bytes(digest[:8], "big") & 0x7FFF_FFFF_FFFF_FFFF
 
     def _load_dicts(self):
-        from .dict_loader import get_dict
+        from .lookup import get_dict
 
         def_zips = [
             p
@@ -131,20 +131,17 @@ class AnkiCardCreator:
 
     def add_word(self, word: str, sentence: str, audio: str) -> str:
         """Look up word, build a note, and add it to the deck. Returns a log line."""
-        from .morphology import (
-            get_dictionary_form,
-            get_furigana_plain,
-            get_sentence_furigana,
-        )
+        from .furigana import get_furigana_plain, get_sentence_furigana
 
         if self._dict_set is None:
             self._load_dicts()
 
-        lemma = get_dictionary_form(sentence, word) if sentence else word
-        result = self._dict_set.lookup(lemma)
+        # Yomitan-style lookup: deinflect the surface word and match against the
+        # dictionaries. The sentence is used only for card building, not lookup.
+        result = self._dict_set.find_term(word)
 
         if result is None:
-            print(f"  WARNING: '{lemma}' not found in dictionary — using surface form")
+            print(f"  WARNING: '{word}' not found in dictionary — using surface form")
             expression_reading = word
             expression_furigana = word
             main_definition = "(not found)"

@@ -63,9 +63,26 @@ def test_pipeline_construction_no_run():
     YoutubeCreateAnkiPipeline(str(WORDS_CSV))
 
 
+# --- yomitan deinflection: pure Python, no heavy deps -----------------------
+
+def test_deinflection_reaches_dictionary_form():
+    from jp_tools.core.lookup import JAPANESE_TRANSFORMER
+
+    def base_forms(word):
+        return {t.text for t in JAPANESE_TRANSFORMER.transform(word)}
+
+    assert "食べる" in base_forms("食べたくない")
+    assert "飲む" in base_forms("飲んだ")
+    assert "高い" in base_forms("高くない")
+    # The dictionary form itself is always among the candidates.
+    assert "食べる" in base_forms("食べる")
+
+
 # --- optional deps: only import if installed --------------------------------
 
-def test_morphology_optional():
+def test_furigana_optional():
     pytest.importorskip("fugashi")
-    from jp_tools.core.morphology import get_dictionary_form
-    assert callable(get_dictionary_form)
+    from jp_tools.core.furigana import get_furigana_plain, get_sentence_furigana
+    assert callable(get_sentence_furigana)
+    assert get_furigana_plain("日本語", "にほんご") == "日本語[にほんご]"
+    assert get_furigana_plain("ねこ", "ねこ") == "ねこ"
