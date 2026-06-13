@@ -12,7 +12,7 @@ from .._paths import DEFAULT_DICTS_DIR
 
 
 def _opt_path(path: str | None) -> str | None:
-    return path if path and os.path.isfile(path) else None
+    return path if path and os.path.isdir(path) else None
 
 
 from ._lapis_template import CARD_CSS, RECOGNITION_AFMT, RECOGNITION_QFMT
@@ -97,11 +97,11 @@ class AnkiCardCreator:
         deck_id = self._stable_id(f"jp-tools:deck:{deck_name}")
         self._deck = genanki.Deck(deck_id, deck_name)
         self._media: list[str] = []
-        self._daijirin = daijirin or str(DEFAULT_DICTS_DIR / "daijirin.zip")
-        self._daijisen = daijisen or str(DEFAULT_DICTS_DIR / "daijisen.zip")
-        self._jmdict = jmdict or str(DEFAULT_DICTS_DIR / "jmdict_english.zip")
-        self._pitch = pitch or str(DEFAULT_DICTS_DIR / "pitch_daijisen.zip")
-        self._freq = freq or str(DEFAULT_DICTS_DIR / "jpdb_freq.zip")
+        self._daijirin = daijirin or str(DEFAULT_DICTS_DIR / "daijirin")
+        self._daijisen = daijisen or str(DEFAULT_DICTS_DIR / "daijisen")
+        self._jmdict = jmdict or str(DEFAULT_DICTS_DIR / "jmdict_english")
+        self._pitch = pitch or str(DEFAULT_DICTS_DIR / "pitch_daijisen")
+        self._freq = freq or str(DEFAULT_DICTS_DIR / "jpdb_freq")
         self._dict_set = None
 
     @staticmethod
@@ -113,20 +113,20 @@ class AnkiCardCreator:
     def _load_dicts(self):
         from ..lookup import get_dict
 
-        def_zips = [
+        def_dirs = [
             p
             for p in [self._daijirin, self._daijisen, self._jmdict]
-            if os.path.isfile(p)
+            if os.path.isdir(p)
         ]
-        if not def_zips:
+        if not def_dirs:
             raise FileNotFoundError(
                 f"No definition dictionaries found in {DEFAULT_DICTS_DIR}.\n"
-                "  Expected: daijirin.zip, daijisen.zip, or jmdict_english.zip"
+                "  Expected folders: daijirin/, daijisen/, or jmdict_english/"
             )
         self._dict_set = get_dict(
-            def_zips,
-            pitch_zip=_opt_path(self._pitch),
-            freq_zip=_opt_path(self._freq),
+            def_dirs,
+            pitch_dir=_opt_path(self._pitch),
+            freq_dir=_opt_path(self._freq),
         )
 
     def add_word(self, word: str, sentence: str, audio: str) -> str:

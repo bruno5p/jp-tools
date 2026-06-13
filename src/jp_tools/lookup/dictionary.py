@@ -16,8 +16,8 @@ from __future__ import annotations
 
 import json
 import sys
-import zipfile
 from dataclasses import dataclass
+from pathlib import Path
 
 from .japanese_transforms import JAPANESE_TRANSFORMER
 from .transforms import LanguageTransformer
@@ -82,16 +82,19 @@ def _flatten_structured(node) -> str:
     return ""
 
 
-def _load_meta_banks(zf: zipfile.ZipFile) -> dict:
-    meta: dict[str, list] = {}
-    bank_files = sorted(
-        n for n in zf.namelist() if n.startswith("term_meta_bank_") and n.endswith(".json")
+def _bank_files(directory: Path, prefix: str) -> list[Path]:
+    """Yomitan bank files (``term_bank_1.json`` …) in numeric order within ``directory``."""
+    return sorted(
+        directory.glob(f"{prefix}*.json"),
+        key=lambda p: int("".join(filter(str.isdigit, p.stem)) or 0),
     )
-    for fname in bank_files:
-        entries = json.loads(zf.read(fname))
-        for entry in entries:
-            key = entry[0]
-            meta.setdefault(key, []).append(entry)
+
+
+def _load_meta_banks(directory: Path) -> dict:
+    meta: dict[str, list] = {}
+    for fname in _bank_files(directory, "term_meta_bank_"):
+        for entry in json.loads(fname.read_text(encoding="utf-8")):
+            meta.setdefault(entry[0], []).append(entry)
     return meta
 
 
@@ -120,9 +123,9 @@ def _get_pitch_category(position: int | None, reading: str) -> str | None:
 class DictionarySet:
     def __init__(
         self,
-        def_zips: list[str],
-        pitch_zip: str | None = None,
-        freq_zip: str | None = None,
+        def_dirs: list[str],
+        pitch_dir: str | None = None,
+        freq_dir: str | None = None,
     ):
         # All entries, plus an index mapping every expression AND reading to the
         # entries that bear it (yomitan queries both the expression and reading
@@ -130,38 +133,32 @@ class DictionarySet:
         self._entries: list[_Entry] = []
         self._index: dict[str, list[int]] = {}
 
-        for dict_index, path in enumerate(def_zips):
+        for dict_index, path in enumerate(def_dirs):
             print(f"Loading dictionary: {path}", file=sys.stderr)
-            with zipfile.ZipFile(path) as zf:
-                self._load_term_banks(zf, dict_index)
+            self._load_term_banks(Path(path), dict_index)
 
         self._pitch_meta: dict[str, list] = {}
-        if pitch_zip:
-            print(f"Loading pitch accent dictionary: {pitch_zip}", file=sys.stderr)
+        if pitch_dir:
+            print(f"Loading pitch accent dictionary: {pitch_dir}", file=sys.stderr)
             try:
-                with zipfile.ZipFile(pitch_zip) as zf:
-                    self._pitch_meta = _load_meta_banks(zf)
+                self._pitch_meta = _load_meta_banks(Path(pitch_dir))
             except Exception as e:
                 print(f"  WARNING: could not load pitch dict: {e}", file=sys.stderr)
 
         self._freq_meta: dict[str, list] = {}
-        if freq_zip:
-            print(f"Loading frequency dictionary: {freq_zip}", file=sys.stderr)
-            with zipfile.ZipFile(freq_zip) as zf:
-                self._freq_meta = _load_meta_banks(zf)
+        if freq_dir:
+            print(f"Loading frequency dictionary: {freq_dir}", file=sys.stderr)
+            self._freq_meta = _load_meta_banks(Path(freq_dir))
 
         print(
             f"Dictionaries loaded: {len(self._entries):,} entries "
-            f"across {len(def_zips)} dict(s).",
+            f"across {len(def_dirs)} dict(s).",
             file=sys.stderr,
         )
 
-    def _load_term_banks(self, zf: zipfile.ZipFile, dict_index: int) -> None:
-        bank_files = sorted(
-            n for n in zf.namelist() if n.startswith("term_bank_") and n.endswith(".json")
-        )
-        for fname in bank_files:
-            for row in json.loads(zf.read(fname)):
+    def _load_term_banks(self, directory: Path, dict_index: int) -> None:
+        for fname in _bank_files(directory, "term_bank_"):
+            for row in json.loads(fname.read_text(encoding="utf-8")):
                 entry = _Entry(
                     expression=row[0],
                     reading=row[1] or row[0],
@@ -275,8 +272,8 @@ class DictionarySet:
 
 
 def get_dict(
-    def_zips: list[str],
-    pitch_zip: str | None = None,
-    freq_zip: str | None = None,
+    def_dirs: list[str],
+    pitch_dir: str | None = None,
+    freq_dir: str | None = None,
 ) -> DictionarySet:
-    return DictionarySet(def_zips, pitch_zip=pitch_zip, freq_zip=freq_zip)
+    return DictionarySet(def_dirs, pitch_dir=pitch_dir, freq_dir=freq_dir)

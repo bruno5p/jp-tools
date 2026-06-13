@@ -166,10 +166,9 @@ class TestListCreateAnkiPipeline:
                 1 for row in csv.DictReader(f) if row.get("word", "").strip()
             )
 
-        # Minimal valid zip so os.path.isfile passes the dict check
-        fake_jmdict = tmp_path / "jmdict.zip"
-        with zipfile.ZipFile(fake_jmdict, "w"):
-            pass
+        # Empty dict folder so os.path.isdir passes the dict check
+        fake_jmdict = tmp_path / "jmdict"
+        fake_jmdict.mkdir()
 
         stub_result = DictResult(
             expression="stub",

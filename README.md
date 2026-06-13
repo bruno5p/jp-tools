@@ -12,8 +12,10 @@ pip install -e '.[transcribe]'    # + ASR stack (torch, transformers) — multi-
 ```
 
 External tools `yt-dlp` and `ffmpeg` must be on `PATH` (or pass `--ytdlp` /
-`--ffmpeg`). User-supplied Yomitan dictionary ZIPs go in `dicts/`
-(`jitendex.zip`, `kanjium_pitch_accents.zip`, `jpdb_v2.2_freq.zip`).
+`--ffmpeg`). User-supplied Yomitan dictionaries go in `dicts/`, each extracted
+into its own folder (e.g. `dicts/daijirin/`, `dicts/pitch_daijisen/`,
+`dicts/jpdb_freq/`) containing the dictionary's `term_bank_*.json` /
+`term_meta_bank_*.json` files.
 
 ## Command-line tools
 

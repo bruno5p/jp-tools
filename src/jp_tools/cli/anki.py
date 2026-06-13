@@ -16,16 +16,16 @@ def main() -> None:
     parser.add_argument("--output", "-o", default="deck.apkg",
                         help="Output .apkg path (default: deck.apkg)")
     parser.add_argument("--deck", "-d", default="Japanese Mining", help="Anki deck name")
-    parser.add_argument("--daijirin", default=None, metavar="ZIP",
-                        help="三省堂スーパー大辞林 ZIP (default: dicts/daijirin.zip)")
-    parser.add_argument("--daijisen", default=None, metavar="ZIP",
-                        help="大辞泉 ZIP (default: dicts/daijisen.zip)")
-    parser.add_argument("--jmdict", default=None, metavar="ZIP",
-                        help="JMdict English ZIP fallback (default: dicts/jmdict_english.zip)")
-    parser.add_argument("--pitch", default=None, metavar="ZIP",
-                        help="Pitch accent ZIP (default: dicts/pitch_daijisen.zip)")
-    parser.add_argument("--freq", default=None, metavar="ZIP",
-                        help="Frequency list ZIP (default: dicts/jpdb_freq.zip)")
+    parser.add_argument("--daijirin", default=None, metavar="DIR",
+                        help="三省堂スーパー大辞林 folder (default: dicts/daijirin)")
+    parser.add_argument("--daijisen", default=None, metavar="DIR",
+                        help="大辞泉 folder (default: dicts/daijisen)")
+    parser.add_argument("--jmdict", default=None, metavar="DIR",
+                        help="JMdict English folder fallback (default: dicts/jmdict_english)")
+    parser.add_argument("--pitch", default=None, metavar="DIR",
+                        help="Pitch accent folder (default: dicts/pitch_daijisen)")
+    parser.add_argument("--freq", default=None, metavar="DIR",
+                        help="Frequency list folder (default: dicts/jpdb_freq)")
     args = parser.parse_args()
 
     ListCreateAnkiPipeline(
