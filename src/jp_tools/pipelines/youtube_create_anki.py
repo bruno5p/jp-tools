@@ -29,7 +29,9 @@ class YoutubeCreateAnkiPipeline(Pipeline):
         daijisen: str | None = None,
         jmdict: str | None = None,
         pitch: str | None = None,
-        freq: str | None = None,
+        freqs: list[str] | None = None,
+        word_audio: bool = True,
+        audio_timeout: float = 10,
     ):
         self.transcribe = YoutubeTranscribePipeline(
             input_table,
@@ -47,7 +49,9 @@ class YoutubeCreateAnkiPipeline(Pipeline):
         self.daijisen = daijisen
         self.jmdict = jmdict
         self.pitch = pitch
-        self.freq = freq
+        self.freqs = freqs
+        self.word_audio = word_audio
+        self.audio_timeout = audio_timeout
 
     def run(self) -> str:
         csv_path = self.transcribe.run()
@@ -59,6 +63,8 @@ class YoutubeCreateAnkiPipeline(Pipeline):
             daijisen=self.daijisen,
             jmdict=self.jmdict,
             pitch=self.pitch,
-            freq=self.freq,
+            freqs=self.freqs,
+            word_audio=self.word_audio,
+            audio_timeout=self.audio_timeout,
         )
         return anki.run()

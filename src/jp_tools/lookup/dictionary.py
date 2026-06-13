@@ -31,7 +31,9 @@ class DictResult:
     pos: list[str]
     pitch_position: int | None
     pitch_category: str | None  # "heiban" | "atamadaka" | "nakadaka" | "odaka" | None
-    frequency: int | None
+    # One (label, rank) pair per frequency list that contains this word, in the
+    # order the lists were loaded. Lists missing the word are simply omitted.
+    frequencies: list[tuple[str, int]]
 
 
 @dataclass
@@ -98,6 +100,54 @@ def _load_meta_banks(directory: Path) -> dict:
     return meta
 
 
+def _read_dict_title(directory: Path) -> str | None:
+    """The human-readable title from a Yomitan dictionary's ``index.json``."""
+    index = directory / "index.json"
+    if not index.is_file():
+        return None
+    try:
+        return json.loads(index.read_text(encoding="utf-8")).get("title")
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def _coerce_freq_value(data) -> int | None:
+    """Pull the numeric rank out of any Yomitan ``freq`` payload shape."""
+    if isinstance(data, (int, float)):
+        return int(data)
+    if isinstance(data, dict):
+        if isinstance(data.get("value"), (int, float)):
+            return int(data["value"])
+        freq = data.get("frequency")
+        if isinstance(freq, (int, float)):
+            return int(freq)
+        if isinstance(freq, dict) and isinstance(freq.get("value"), (int, float)):
+            return int(freq["value"])
+    return None
+
+
+def _extract_freq(meta: dict, expression: str, reading: str) -> int | None:
+    """Look ``expression``/``reading`` up in one frequency meta bank.
+
+    Entries that pin a specific ``reading`` are preferred only when it matches; a
+    reading-mismatched entry is kept as a last-resort fallback.
+    """
+    fallback: int | None = None
+    for key in (expression, reading):
+        for entry in meta.get(key, []):
+            if len(entry) < 3 or entry[1] != "freq":
+                continue
+            value = _coerce_freq_value(entry[2])
+            if value is None:
+                continue
+            entry_reading = entry[2].get("reading") if isinstance(entry[2], dict) else None
+            if entry_reading is None or entry_reading == reading:
+                return value
+            if fallback is None:
+                fallback = value
+    return fallback
+
+
 def _count_morae(reading: str) -> int:
     digraph_second = set("ぁぃぅぇぉゃゅょァィゥェォャュョ")
     count, i = 0, 0
@@ -125,7 +175,7 @@ class DictionarySet:
         self,
         def_dirs: list[str],
         pitch_dir: str | None = None,
-        freq_dir: str | None = None,
+        freq_dirs: list[str] | None = None,
     ):
         # All entries, plus an index mapping every expression AND reading to the
         # entries that bear it (yomitan queries both the expression and reading
@@ -145,10 +195,14 @@ class DictionarySet:
             except Exception as e:
                 print(f"  WARNING: could not load pitch dict: {e}", file=sys.stderr)
 
-        self._freq_meta: dict[str, list] = {}
-        if freq_dir:
-            print(f"Loading frequency dictionary: {freq_dir}", file=sys.stderr)
-            self._freq_meta = _load_meta_banks(Path(freq_dir))
+        # (label, meta) per frequency list, kept in load order so the resulting
+        # frequency display follows the order the lists were supplied in.
+        self._freq_lists: list[tuple[str, dict]] = []
+        for path in freq_dirs or []:
+            directory = Path(path)
+            label = _read_dict_title(directory) or directory.name
+            print(f"Loading frequency dictionary: {label} ({path})", file=sys.stderr)
+            self._freq_lists.append((label, _load_meta_banks(directory)))
 
         print(
             f"Dictionaries loaded: {len(self._entries):,} entries "
@@ -232,7 +286,7 @@ class DictionarySet:
             pos=pos,
             pitch_position=pitch_position,
             pitch_category=_get_pitch_category(pitch_position, entry.reading),
-            frequency=self._get_frequency(entry.expression, entry.reading),
+            frequencies=self._get_frequencies(entry.expression, entry.reading),
         )
 
     def _get_pitch(self, expression: str, reading: str) -> int | None:
@@ -253,27 +307,18 @@ class DictionarySet:
                     return pitches[0].get("position")
         return None
 
-    def _get_frequency(self, expression: str, reading: str) -> int | None:
-        for key in (expression, reading):
-            for entry in self._freq_meta.get(key, []):
-                if entry[1] != "freq":
-                    continue
-                data = entry[2]
-                if not isinstance(data, dict):
-                    if isinstance(data, (int, float)):
-                        return int(data)
-                    continue
-                freq_data = data.get("frequency")
-                if isinstance(freq_data, dict):
-                    return freq_data.get("value")
-                if isinstance(freq_data, (int, float)):
-                    return int(freq_data)
-        return None
+    def _get_frequencies(self, expression: str, reading: str) -> list[tuple[str, int]]:
+        out: list[tuple[str, int]] = []
+        for label, meta in self._freq_lists:
+            value = _extract_freq(meta, expression, reading)
+            if value is not None:
+                out.append((label, value))
+        return out
 
 
 def get_dict(
     def_dirs: list[str],
     pitch_dir: str | None = None,
-    freq_dir: str | None = None,
+    freq_dirs: list[str] | None = None,
 ) -> DictionarySet:
-    return DictionarySet(def_dirs, pitch_dir=pitch_dir, freq_dir=freq_dir)
+    return DictionarySet(def_dirs, pitch_dir=pitch_dir, freq_dirs=freq_dirs)

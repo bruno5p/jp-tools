@@ -24,8 +24,15 @@ def main() -> None:
                         help="JMdict English folder fallback (default: dicts/jmdict_english)")
     parser.add_argument("--pitch", default=None, metavar="DIR",
                         help="Pitch accent folder (default: dicts/pitch_daijisen)")
-    parser.add_argument("--freq", default=None, metavar="DIR",
-                        help="Frequency list folder (default: dicts/jpdb_freq)")
+    parser.add_argument("--freq", nargs="*", default=None, metavar="DIR",
+                        help="Frequency list folders shown on each card (default: "
+                             "dicts/jpdb_freq, anime_drama_freq_list, innocent_ranked, "
+                             "'SoL Top 100')")
+    parser.add_argument("--no-word-audio", dest="word_audio", action="store_false",
+                        help="Disable automatic word-audio fetching (Yomitan-style: "
+                             "local audio server → jpod101 → jisho)")
+    parser.add_argument("--audio-timeout", type=float, default=10, metavar="SECONDS",
+                        help="Per-request timeout for audio fetching (default: 10)")
     args = parser.parse_args()
 
     ListCreateAnkiPipeline(
@@ -36,7 +43,9 @@ def main() -> None:
         daijisen=args.daijisen,
         jmdict=args.jmdict,
         pitch=args.pitch,
-        freq=args.freq,
+        freqs=args.freq,
+        word_audio=args.word_audio,
+        audio_timeout=args.audio_timeout,
     ).run()
 
 

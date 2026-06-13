@@ -10,26 +10,26 @@ WORDS_CSV = Path(__file__).parent / "fixtures" / "words.csv"
 # --- pure building-block helpers -------------------------------------------
 
 def test_parse_timestamp():
-    from jp_tools.core.segment_dl import SegmentDownloader
+    from jp_tools.video.segment_dl import SegmentDownloader
     assert SegmentDownloader.parse_timestamp("5:40") == 5 * 60 + 40
     assert SegmentDownloader.parse_timestamp("1:02:03") == 3600 + 2 * 60 + 3
 
 
 def test_format_label():
-    from jp_tools.core.segment_dl import SegmentDownloader
+    from jp_tools.video.segment_dl import SegmentDownloader
     assert SegmentDownloader.format_label(340) == "5m40s"
     assert SegmentDownloader.format_label(3723) == "1h2m3s"
 
 
 def test_render_pitch_html_heiban():
-    from jp_tools.core.pitch_renderer import render_pitch_html
+    from jp_tools.anki.pitch_renderer import render_pitch_html
     html = render_pitch_html("こころ", 0)
     assert "pitch" in html
     assert "title='[0]'" in html
 
 
 def test_render_pitch_html_none():
-    from jp_tools.core.pitch_renderer import render_pitch_html
+    from jp_tools.anki.pitch_renderer import render_pitch_html
     assert render_pitch_html("あい", None) == "<span class='pitch'>あい</span>"
     assert render_pitch_html("", 1) == ""
 
@@ -66,7 +66,7 @@ def test_pipeline_construction_no_run():
 # --- yomitan deinflection: pure Python, no heavy deps -----------------------
 
 def test_deinflection_reaches_dictionary_form():
-    from jp_tools.core.lookup import JAPANESE_TRANSFORMER
+    from jp_tools.lookup import JAPANESE_TRANSFORMER
 
     def base_forms(word):
         return {t.text for t in JAPANESE_TRANSFORMER.transform(word)}
@@ -82,7 +82,7 @@ def test_deinflection_reaches_dictionary_form():
 
 def test_furigana_optional():
     pytest.importorskip("fugashi")
-    from jp_tools.core.furigana import get_furigana_plain, get_sentence_furigana
+    from jp_tools.furigana import get_furigana_plain, get_sentence_furigana
     assert callable(get_sentence_furigana)
     assert get_furigana_plain("日本語", "にほんご") == "日本語[にほんご]"
     assert get_furigana_plain("ねこ", "ねこ") == "ねこ"

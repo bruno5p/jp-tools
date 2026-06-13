@@ -157,7 +157,7 @@ def _apkg_note_count(apkg_path: Path, tmp_path: Path) -> int:
 
 class TestListCreateAnkiPipeline:
     def test_run_creates_apkg_with_correct_card_count(self, tmp_path):
-        from jp_tools.core.lookup import DictResult
+        from jp_tools.lookup import DictResult
         from jp_tools.pipelines.list_create_anki import ListCreateAnkiPipeline
 
         fixture_csv = FIXTURES / "anki_words_list.csv"
@@ -177,7 +177,7 @@ class TestListCreateAnkiPipeline:
             pos=[],
             pitch_position=1,
             pitch_category="atamadaka",
-            frequency=100,
+            frequencies=[("JPDB", 100)],
         )
         mock_dict_set = MagicMock()
         mock_dict_set.find_term.return_value = stub_result
@@ -187,13 +187,13 @@ class TestListCreateAnkiPipeline:
 
         try:
             with (
-                patch("jp_tools.core.lookup.get_dict", return_value=mock_dict_set),
+                patch("jp_tools.lookup.get_dict", return_value=mock_dict_set),
                 patch(
-                    "jp_tools.core.furigana.get_furigana_plain",
+                    "jp_tools.furigana.get_furigana_plain",
                     side_effect=lambda w, r: w,
                 ),
                 patch(
-                    "jp_tools.core.furigana.get_sentence_furigana",
+                    "jp_tools.furigana.get_sentence_furigana",
                     side_effect=lambda s: s,
                 ),
             ):
@@ -201,6 +201,7 @@ class TestListCreateAnkiPipeline:
                     csv_path=str(fixture_csv),
                     output=str(output_apkg),
                     jmdict=str(fake_jmdict),
+                    word_audio=False,  # keep the test offline / network-free
                 )
                 result = pipeline.run()
 

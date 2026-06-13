@@ -1,7 +1,9 @@
 import hashlib
 import os
 import sys
+import tempfile
 from dataclasses import dataclass
+from ._lapis_template import CARD_CSS, RECOGNITION_AFMT, RECOGNITION_QFMT
 
 try:
     import genanki
@@ -10,12 +12,15 @@ except ImportError:
 
 from .._paths import DEFAULT_DICTS_DIR
 
+# Frequency lists shown on each card, in display order. Each is a folder of
+# extracted Yomitan frequency banks under dicts/; missing ones are skipped.
+_DEFAULT_FREQ_DIRS = (
+    "jpdb_freq",
+    "anime_drama_freq_list",
+    "innocent_ranked",
+    "SoL Top 100",
+)
 
-def _opt_path(path: str | None) -> str | None:
-    return path if path and os.path.isdir(path) else None
-
-
-from ._lapis_template import CARD_CSS, RECOGNITION_AFMT, RECOGNITION_QFMT
 
 # This ID was the original value chosen to match the "Lapis" note type already
 # present in the target Anki collection.  Do not change it without also
@@ -92,7 +97,10 @@ class AnkiCardCreator:
         daijisen: str | None = None,
         jmdict: str | None = None,
         pitch: str | None = None,
-        freq: str | None = None,
+        freqs: list[str] | None = None,
+        word_audio: bool = True,
+        audio_sources=None,
+        audio_timeout: float = 10,
     ):
         deck_id = self._stable_id(f"jp-tools:deck:{deck_name}")
         self._deck = genanki.Deck(deck_id, deck_name)
@@ -101,14 +109,24 @@ class AnkiCardCreator:
         self._daijisen = daijisen or str(DEFAULT_DICTS_DIR / "daijisen")
         self._jmdict = jmdict or str(DEFAULT_DICTS_DIR / "jmdict_english")
         self._pitch = pitch or str(DEFAULT_DICTS_DIR / "pitch_daijisen")
-        self._freq = freq or str(DEFAULT_DICTS_DIR / "jpdb_freq")
+        self._freqs = freqs or [
+            str(DEFAULT_DICTS_DIR / name) for name in _DEFAULT_FREQ_DIRS
+        ]
         self._dict_set = None
+        self._word_audio = word_audio
+        self._audio_sources = audio_sources
+        self._audio_timeout = audio_timeout
+        self._audio = None  # lazily created AudioDownloader
 
     @staticmethod
     def _stable_id(seed: str) -> int:
         """Derive a stable positive 63-bit integer from a string seed."""
         digest = hashlib.sha256(seed.encode()).digest()
         return int.from_bytes(digest[:8], "big") & 0x7FFF_FFFF_FFFF_FFFF
+
+    @staticmethod
+    def _opt_path(path: str | None) -> str | None:
+        return path if path and os.path.isdir(path) else None
 
     def _load_dicts(self):
         from ..lookup import get_dict
@@ -125,9 +143,22 @@ class AnkiCardCreator:
             )
         self._dict_set = get_dict(
             def_dirs,
-            pitch_dir=_opt_path(self._pitch),
-            freq_dir=_opt_path(self._freq),
+            pitch_dir=self._opt_path(self._pitch),
+            freq_dirs=[p for p in self._freqs if os.path.isdir(p)],
         )
+
+    def _get_audio(self):
+        """Lazily build the AudioDownloader with a creator-owned media dir."""
+        if self._audio is None:
+            from .audio import DEFAULT_SOURCES, AudioDownloader
+
+            media_dir = tempfile.mkdtemp(prefix="jp_audio_")
+            self._audio = AudioDownloader(
+                sources=self._audio_sources or DEFAULT_SOURCES,
+                media_dir=media_dir,
+                timeout=self._audio_timeout,
+            )
+        return self._audio
 
     def add_word(self, word: str, sentence: str, audio: str) -> str:
         """Look up word, build a note, and add it to the deck. Returns a log line."""
@@ -140,6 +171,8 @@ class AnkiCardCreator:
         # dictionaries. The sentence is used only for card building, not lookup.
         result = self._dict_set.find_term(word)
 
+        expression_audio = ""
+        audio_ok = False
         if result is None:
             print(f"  WARNING: '{word}' not found in dictionary — using surface form")
             expression_reading = word
@@ -149,6 +182,7 @@ class AnkiCardCreator:
             pitch_position = ""
             pitch_categories = ""
             frequency = ""
+            freq_sort = ""
         else:
             expression_reading = result.reading
             expression_furigana = get_furigana_plain(word, result.reading)
@@ -164,7 +198,23 @@ class AnkiCardCreator:
                 str(result.pitch_position) if result.pitch_position is not None else ""
             )
             pitch_categories = result.pitch_category or ""
-            frequency = str(result.frequency) if result.frequency is not None else ""
+            # "JPDB: 9892, Anime & J-drama: 14718, …" — the card template's JS
+            # splits this on commas to render one bullet per list. Lists missing
+            # the word are already absent from result.frequencies.
+            frequency = "\n".join(
+                f"{label}: {rank}" for label, rank in result.frequencies
+            )
+            # Headline/sort value: the first (primary) list's rank, e.g. JPDB.
+            freq_sort = str(result.frequencies[0][1]) if result.frequencies else ""
+
+            # Yomitan-style word audio for the dictionary headword. Fail-soft:
+            # an unreachable source just leaves ExpressionAudio empty.
+            if self._word_audio:
+                path = self._get_audio().fetch(result.expression, result.reading)
+                if path:
+                    expression_audio = f"[sound:{os.path.basename(path)}]"
+                    self._media.append(path)
+                    audio_ok = True
 
         if sentence and word in sentence:
             idx = sentence.index(word)
@@ -178,7 +228,7 @@ class AnkiCardCreator:
             expression=word,
             expression_furigana=expression_furigana,
             expression_reading=expression_reading,
-            expression_audio="",
+            expression_audio=expression_audio,
             selection_text=word,
             main_definition=main_definition,
             sentence=bolded,
@@ -188,14 +238,16 @@ class AnkiCardCreator:
             pitch_position=pitch_position,
             pitch_categories=pitch_categories,
             frequency=frequency,
-            freq_sort=frequency,
+            freq_sort=freq_sort,
             misc_info="",
         )
         self.add_note(data, audio_path=audio if audio else None)
+        audio_flag = "✓" if audio_ok else ("✗" if self._word_audio else "-")
         return (
             f"  + {word}  [{expression_reading}]"
             f"  pitch={pitch_position or '-'}({pitch_categories or '-'})"
             f"  freq={frequency or '-'}"
+            f"  audio={audio_flag}"
         )
 
     def add_note(self, data: NoteData, audio_path: str | None = None) -> None:
@@ -212,7 +264,7 @@ class AnkiCardCreator:
                 data.expression_furigana,
                 data.expression_reading,
                 data.expression_audio,
-                data.selection_text,
+                "",
                 data.main_definition,
                 "",  # DefinitionPicture
                 data.sentence,

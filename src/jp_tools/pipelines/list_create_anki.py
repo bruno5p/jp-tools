@@ -23,7 +23,9 @@ class ListCreateAnkiPipeline(Pipeline):
         daijisen: str | None = None,
         jmdict: str | None = None,
         pitch: str | None = None,
-        freq: str | None = None,
+        freqs: list[str] | None = None,
+        word_audio: bool = True,
+        audio_timeout: float = 10,
     ):
         self.csv_path = csv_path
         self.output = output
@@ -32,7 +34,9 @@ class ListCreateAnkiPipeline(Pipeline):
         self._daijisen = daijisen
         self._jmdict = jmdict
         self._pitch = pitch
-        self._freq = freq
+        self._freqs = freqs
+        self._word_audio = word_audio
+        self._audio_timeout = audio_timeout
 
     def run(self) -> str:
         from ..anki.creator import AnkiCardCreator
@@ -46,7 +50,9 @@ class ListCreateAnkiPipeline(Pipeline):
             daijisen=self._daijisen,
             jmdict=self._jmdict,
             pitch=self._pitch,
-            freq=self._freq,
+            freqs=self._freqs,
+            word_audio=self._word_audio,
+            audio_timeout=self._audio_timeout,
         )
 
         with open(self.csv_path, encoding="utf-8") as f:
