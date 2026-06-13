@@ -34,6 +34,7 @@ class DictResult:
     # One (label, rank) pair per frequency list that contains this word, in the
     # order the lists were loaded. Lists missing the word are simply omitted.
     frequencies: list[tuple[str, int]]
+    dict_name: str = ""
 
 
 @dataclass
@@ -82,6 +83,14 @@ def _flatten_structured(node) -> str:
         text = node.get("text", "")
         return str(text) if text else ""
     return ""
+
+
+def _alphabet_ratio(result: "DictResult") -> float:
+    """Ratio of ASCII a-z/A-Z characters to total characters across all definitions."""
+    text = "".join(result.definitions)
+    if not text:
+        return 0.0
+    return sum(1 for c in text if c.isascii() and c.isalpha()) / len(text)
 
 
 def _bank_files(directory: Path, prefix: str) -> list[Path]:
@@ -182,10 +191,12 @@ class DictionarySet:
         # indexes). ``dict_index`` is the load order = priority (lower wins ties).
         self._entries: list[_Entry] = []
         self._index: dict[str, list[int]] = {}
+        self._dict_names: list[str] = []
 
         for dict_index, path in enumerate(def_dirs):
             print(f"Loading dictionary: {path}", file=sys.stderr)
             self._load_term_banks(Path(path), dict_index)
+            self._dict_names.append(_read_dict_title(Path(path)) or Path(path).name)
 
         self._pitch_meta: dict[str, list] = {}
         if pitch_dir:
@@ -228,9 +239,8 @@ class DictionarySet:
                 if entry.reading != entry.expression:
                     self._index.setdefault(entry.reading, []).append(idx)
 
-    def find_term(self, word: str) -> DictResult | None:
-        """Yomitan-style lookup: deinflect ``word`` longest-first and return the best match."""
-        # entry index -> (source_length, inflection_chain_length) of its best match
+    def find_all_terms(self, word: str) -> list[DictResult]:
+        """Return all entries at the longest deinflected match, sorted by dict priority."""
         best_per_entry: dict[int, tuple[int, int]] = {}
 
         source = word
@@ -251,25 +261,36 @@ class DictionarySet:
                     ):
                         continue
                     prev = best_per_entry.get(entry_id)
-                    cand = (source_len, chain_len)
                     if prev is None or (source_len, -chain_len) > (prev[0], -prev[1]):
-                        best_per_entry[entry_id] = cand
+                        best_per_entry[entry_id] = (source_len, chain_len)
             source = source[:-1]
 
         if not best_per_entry:
-            return None
+            return []
 
-        # Rank: source length desc -> chain length asc -> dict priority asc -> score desc.
-        best_id = min(
-            best_per_entry,
-            key=lambda eid: (
-                -best_per_entry[eid][0],
-                best_per_entry[eid][1],
-                self._entries[eid].dict_index,
-                -self._entries[eid].score,
-            ),
-        )
-        return self._build_result(self._entries[best_id])
+        max_source_len = max(v[0] for v in best_per_entry.values())
+        top = [
+            (eid, chain_len)
+            for eid, (source_len, chain_len) in best_per_entry.items()
+            if source_len == max_source_len
+        ]
+        top.sort(key=lambda x: (
+            self._entries[x[0]].dict_index,
+            x[1],
+            -self._entries[x[0]].score,
+        ))
+        results = [self._build_result(self._entries[eid]) for eid, _ in top]
+        # Stable re-sort: within each dict group, lower alphabet ratio (more Japanese) first.
+        results.sort(key=lambda r: (
+            self._dict_names.index(r.dict_name),
+            _alphabet_ratio(r),
+        ))
+        return results
+
+    def find_term(self, word: str) -> DictResult | None:
+        """Return the single best match (first result of find_all_terms)."""
+        results = self.find_all_terms(word)
+        return results[0] if results else None
 
     def _build_result(self, entry: _Entry) -> DictResult:
         definitions = (
@@ -287,6 +308,7 @@ class DictionarySet:
             pitch_position=pitch_position,
             pitch_category=_get_pitch_category(pitch_position, entry.reading),
             frequencies=self._get_frequencies(entry.expression, entry.reading),
+            dict_name=self._dict_names[entry.dict_index],
         )
 
     def _get_pitch(self, expression: str, reading: str) -> int | None:

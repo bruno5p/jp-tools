@@ -20,4 +20,5 @@ dicts/
 
 .env
 
+playground/
 *playground.ipynb

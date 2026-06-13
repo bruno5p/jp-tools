@@ -1,16 +1,19 @@
 import hashlib
 import os
+import re
 import sys
 import tempfile
 from dataclasses import dataclass
 from ._lapis_template import CARD_CSS, RECOGNITION_AFMT, RECOGNITION_QFMT
+from ..lookup import DictResult
+from .._paths import DEFAULT_DICTS_DIR
+
 
 try:
     import genanki
 except ImportError:
     sys.exit("Missing dependency: genanki\n  pip install genanki")
 
-from .._paths import DEFAULT_DICTS_DIR
 
 # Frequency lists shown on each card, in display order. Each is a folder of
 # extracted Yomitan frequency banks under dicts/; missing ones are skipped.
@@ -147,6 +150,29 @@ class AnkiCardCreator:
             freq_dirs=[p for p in self._freqs if os.path.isdir(p)],
         )
 
+    @staticmethod
+    def _strip_links(text: str) -> str:
+        # Preserve inner text of complete <a>…</a> pairs
+        text = re.sub(r"<a\b[^>]*>(.*?)</a>", r"\1", text, flags=re.DOTALL)
+        # Strip all remaining tags except <br>
+        text = re.sub(r"<(?!br\b)/?[^>]+>", "", text, flags=re.IGNORECASE)
+        return text
+
+    def _format_entries(self, results: list[DictResult]) -> str:
+        """Format DictResults as yomitan-style HTML for Anki Glossary / MainDefinition fields."""
+        items = []
+        for r in results:
+            label = ", ".join(r.pos) + ", " + r.dict_name if r.pos else r.dict_name
+            defs = "<br>".join(self._strip_links(d) for d in r.definitions)
+            items.append(
+                f'<li data-dictionary="{r.dict_name}"><i>({label})</i> {defs}</li>'
+            )
+        return (
+            '<div style="text-align: left;" class="yomitan-glossary">'
+            "<ol>" + "".join(items) + "</ol>"
+            "</div>"
+        )
+
     def _get_audio(self):
         """Lazily build the AudioDownloader with a creator-owned media dir."""
         if self._audio is None:
@@ -169,11 +195,11 @@ class AnkiCardCreator:
 
         # Yomitan-style lookup: deinflect the surface word and match against the
         # dictionaries. The sentence is used only for card building, not lookup.
-        result = self._dict_set.find_term(word)
+        results = self._dict_set.find_all_terms(word)
 
         expression_audio = ""
         audio_ok = False
-        if result is None:
+        if not results:
             print(f"  WARNING: '{word}' not found in dictionary — using surface form")
             expression_reading = word
             expression_furigana = word
@@ -184,33 +210,40 @@ class AnkiCardCreator:
             frequency = ""
             freq_sort = ""
         else:
-            expression_reading = result.reading
-            expression_furigana = get_furigana_plain(word, result.reading)
-            main_definition = (
-                result.definitions[0] if result.definitions else "(no definition)"
-            )
-            glossary = (
-                "<br>".join(result.definitions)
-                if result.definitions
-                else "(no definition)"
-            )
+            top = results[0]
+            expression_reading = top.reading
+            expression_furigana = get_furigana_plain(word, top.reading)
             pitch_position = (
-                str(result.pitch_position) if result.pitch_position is not None else ""
+                str(top.pitch_position) if top.pitch_position is not None else ""
             )
-            pitch_categories = result.pitch_category or ""
+            pitch_categories = top.pitch_category or ""
             # "JPDB: 9892, Anime & J-drama: 14718, …" — the card template's JS
             # splits this on commas to render one bullet per list. Lists missing
             # the word are already absent from result.frequencies.
-            frequency = "\n".join(
-                f"{label}: {rank}" for label, rank in result.frequencies
+            frequency = (
+                (
+                    '<ul style="text-align: left;">'
+                    + "".join(
+                        f"<li>{label}: {rank}</li>" for label, rank in top.frequencies
+                    )
+                    + "</ul>"
+                )
+                if top.frequencies
+                else ""
             )
             # Headline/sort value: the first (primary) list's rank, e.g. JPDB.
-            freq_sort = str(result.frequencies[0][1]) if result.frequencies else ""
+            freq_sort = str(top.frequencies[0][1]) if top.frequencies else ""
+
+            top_dict = top.dict_name
+            main_definition = self._format_entries(
+                [r for r in results if r.dict_name == top_dict]
+            )
+            glossary = self._format_entries(results)
 
             # Yomitan-style word audio for the dictionary headword. Fail-soft:
             # an unreachable source just leaves ExpressionAudio empty.
             if self._word_audio:
-                path = self._get_audio().fetch(result.expression, result.reading)
+                path = self._get_audio().fetch(top.expression, top.reading)
                 if path:
                     expression_audio = f"[sound:{os.path.basename(path)}]"
                     self._media.append(path)
