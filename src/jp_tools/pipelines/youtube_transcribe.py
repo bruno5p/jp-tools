@@ -40,26 +40,26 @@ class YoutubeTranscribePipeline(Pipeline):
 
     def _ensure_downloader(self):
         if self._downloader is None:
-            from ..core.segment_dl import SegmentDownloader
+            from ..video.segment_dl import SegmentDownloader
             self._downloader = SegmentDownloader(self._ytdlp_hint, self._ffmpeg_hint)
         return self._downloader
 
     def _ensure_refiner(self):
         if self._refiner is None:
-            from ..core.refine_segment import SegmentRefiner
+            from ..video.refine_segment import SegmentRefiner
             self._refiner = SegmentRefiner(self._ffmpeg_hint)
         return self._refiner
 
     def _ensure_transcriber(self):
         if self._transcriber is None:
-            from ..core.transcribe import Transcriber
+            from ..video.transcribe import Transcriber
             self._transcriber = Transcriber(self.model, self.device)
         return self._transcriber
 
     # -- pipeline steps -------------------------------------------------------
 
     def _download_segment(self, url: str, timestamp: str) -> str:
-        from ..core.segment_dl import SegmentDownloader
+        from ..video.segment_dl import SegmentDownloader
         center = SegmentDownloader.parse_timestamp(timestamp)
         label = SegmentDownloader.format_label(center)
         os.makedirs(self.segments_dir, exist_ok=True)

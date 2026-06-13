@@ -111,7 +111,7 @@ class AnkiCardCreator:
         return int.from_bytes(digest[:8], "big") & 0x7FFF_FFFF_FFFF_FFFF
 
     def _load_dicts(self):
-        from .lookup import get_dict
+        from ..lookup import get_dict
 
         def_zips = [
             p
@@ -131,7 +131,7 @@ class AnkiCardCreator:
 
     def add_word(self, word: str, sentence: str, audio: str) -> str:
         """Look up word, build a note, and add it to the deck. Returns a log line."""
-        from .furigana import get_furigana_plain, get_sentence_furigana
+        from ..furigana import get_furigana_plain, get_sentence_furigana
 
         if self._dict_set is None:
             self._load_dicts()

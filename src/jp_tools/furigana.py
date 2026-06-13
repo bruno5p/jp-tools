@@ -2,7 +2,7 @@
 
 This is the only module that needs fugashi/MeCab: it tokenizes a sentence to
 attach per-token readings. Word-level dictionary lookup and reading resolution
-now live in :mod:`jp_tools.core.lookup` (yomitan-style deinflection).
+now live in :mod:`jp_tools.lookup` (yomitan-style deinflection).
 """
 
 import sys

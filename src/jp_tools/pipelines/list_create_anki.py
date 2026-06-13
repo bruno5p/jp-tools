@@ -35,7 +35,7 @@ class ListCreateAnkiPipeline(Pipeline):
         self._freq = freq
 
     def run(self) -> str:
-        from ..core.anki_creator import AnkiCardCreator
+        from ..anki.creator import AnkiCardCreator
 
         if not os.path.isfile(self.csv_path):
             raise FileNotFoundError(f"CSV not found: {self.csv_path}")
