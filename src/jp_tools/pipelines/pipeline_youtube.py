@@ -1,3 +1,5 @@
+"""YouTube source and combined Anki pipelines."""
+
 import json
 import os
 import re
@@ -13,7 +15,7 @@ _PADDING = 0.25
 _OUTPUT_COLS = list(AnkiCardData.model_fields.keys())
 
 
-class YoutubeTranscribePipeline(Pipeline):
+class PipelineYoutubeTranscribe(Pipeline):
     """Download, transcribe, and refine YouTube segments from a word table."""
 
     def __init__(
@@ -44,18 +46,21 @@ class YoutubeTranscribePipeline(Pipeline):
     def _ensure_downloader(self):
         if self._downloader is None:
             from ..video.segment_dl import SegmentDownloader
+
             self._downloader = SegmentDownloader(self._ytdlp_hint, self._ffmpeg_hint)
         return self._downloader
 
     def _ensure_refiner(self):
         if self._refiner is None:
             from ..video.refine_segment import SegmentRefiner
+
             self._refiner = SegmentRefiner(self._ffmpeg_hint)
         return self._refiner
 
     def _ensure_transcriber(self):
         if self._transcriber is None:
             from ..video.transcribe import Transcriber
+
             self._transcriber = Transcriber(self.model, self.device)
         return self._transcriber
 
@@ -63,15 +68,24 @@ class YoutubeTranscribePipeline(Pipeline):
 
     def _download_segment(self, url: str, timestamp: str) -> str:
         from ..video.segment_dl import SegmentDownloader
+
         center = SegmentDownloader.parse_timestamp(timestamp)
         label = SegmentDownloader.format_label(center)
         os.makedirs(self.segments_dir, exist_ok=True)
         for f in os.listdir(self.segments_dir):
-            if re.match(rf"segment_\d+_{re.escape(label)}\.mp3$", f) and "_refined" not in f:
+            if (
+                re.match(rf"segment_\d+_{re.escape(label)}\.mp3$", f)
+                and "_refined" not in f
+            ):
                 return os.path.join(self.segments_dir, f)
-        self._ensure_downloader().download(url, [center], self.interval, self.segments_dir)
+        self._ensure_downloader().download(
+            url, [center], self.interval, self.segments_dir
+        )
         for f in os.listdir(self.segments_dir):
-            if re.match(rf"segment_\d+_{re.escape(label)}\.mp3$", f) and "_refined" not in f:
+            if (
+                re.match(rf"segment_\d+_{re.escape(label)}\.mp3$", f)
+                and "_refined" not in f
+            ):
                 return os.path.join(self.segments_dir, f)
         raise FileNotFoundError(f"segment not found after download for label '{label}'")
 
@@ -95,7 +109,9 @@ class YoutubeTranscribePipeline(Pipeline):
             lines = block.strip().splitlines()
             if len(lines) < 3:
                 continue
-            if not re.match(r"\d+:\d+:\d+[,\.]\d+\s*-->\s*\d+:\d+:\d+[,\.]\d+", lines[1].strip()):
+            if not re.match(
+                r"\d+:\d+:\d+[,\.]\d+\s*-->\s*\d+:\d+:\d+[,\.]\d+", lines[1].strip()
+            ):
                 continue
             text = " ".join(l.strip() for l in lines[2:] if l.strip())
             entries.append(text)
@@ -113,12 +129,18 @@ class YoutubeTranscribePipeline(Pipeline):
             mp3_path = self._download_segment(url, timestamp)
             srt_path = self._transcribe(mp3_path)
             refined_path = self._refine(mp3_path)
-            sentence = self._sentence_from_srt(srt_path, word) if os.path.exists(srt_path) else ""
+            sentence = (
+                self._sentence_from_srt(srt_path, word)
+                if os.path.exists(srt_path)
+                else ""
+            )
             return AnkiCardData(
                 added_on=datetime.now(),
                 word=word,
                 sentence=sentence or None,
-                sentence_audio_path=os.path.abspath(refined_path) if os.path.exists(refined_path) else None,
+                sentence_audio_path=os.path.abspath(refined_path)
+                if os.path.exists(refined_path)
+                else None,
                 source_metadata=source_meta,
                 status="ok",
             ).to_csv_row()
@@ -140,13 +162,22 @@ class YoutubeTranscribePipeline(Pipeline):
 
         if os.path.exists(self.output_csv):
             existing = pd.read_csv(self.output_csv).fillna("")
-            ok_rows = existing[existing["status"] == "ok"] if "status" in existing.columns else existing
+            ok_rows = (
+                existing[existing["status"] == "ok"]
+                if "status" in existing.columns
+                else existing
+            )
             for _, r in ok_rows.iterrows():
                 try:
                     meta = json.loads(r.get("source_metadata", "") or "")
                 except (json.JSONDecodeError, ValueError):
                     meta = {}
-                done.add((meta.get("video_url", "").strip(), meta.get("timestamp", "").strip()))
+                done.add(
+                    (
+                        meta.get("video_url", "").strip(),
+                        meta.get("timestamp", "").strip(),
+                    )
+                )
                 results.append({col: r.get(col, "") for col in _OUTPUT_COLS})
 
         for _, row in df.iterrows():
@@ -190,3 +221,67 @@ class YoutubeTranscribePipeline(Pipeline):
         existing.to_csv(self.output_csv, index=False)
         print(f"Reprocessed {int(error_mask.sum())} error row(s).")
         return self.output_csv
+
+
+class PipelineYoutubeToAnki(Pipeline):
+    """Build an Anki deck directly from a YouTube word table.
+
+    Chains :class:`PipelineYoutubeTranscribe` → :class:`PipelineAnkiFromList`.
+    """
+
+    def __init__(
+        self,
+        input_table: str,
+        output: str = "deck.apkg",
+        deck_name: str = "Japanese Mining",
+        output_csv: str = "output.csv",
+        segments_dir: str = "segments",
+        interval: float = 8,
+        ytdlp: str | None = None,
+        ffmpeg: str | None = None,
+        model: str = DEFAULT_ASR_MODEL,
+        device: str | None = None,
+        daijirin: str | None = None,
+        daijisen: str | None = None,
+        jmdict: str | None = None,
+        pitch: str | None = None,
+        freqs: list[str] | None = None,
+        word_audio: bool = True,
+        audio_timeout: float = 10,
+    ):
+        self.transcribe = PipelineYoutubeTranscribe(
+            input_table,
+            output_csv=output_csv,
+            segments_dir=segments_dir,
+            interval=interval,
+            ytdlp=ytdlp,
+            ffmpeg=ffmpeg,
+            model=model,
+            device=device,
+        )
+        self.output = output
+        self.deck_name = deck_name
+        self.daijirin = daijirin
+        self.daijisen = daijisen
+        self.jmdict = jmdict
+        self.pitch = pitch
+        self.freqs = freqs
+        self.word_audio = word_audio
+        self.audio_timeout = audio_timeout
+
+    def run(self) -> str:
+        from .pipeline_anki import PipelineAnkiFromList
+
+        csv_path = self.transcribe.run()
+        return PipelineAnkiFromList(
+            csv_path,
+            output=self.output,
+            deck_name=self.deck_name,
+            daijirin=self.daijirin,
+            daijisen=self.daijisen,
+            jmdict=self.jmdict,
+            pitch=self.pitch,
+            freqs=self.freqs,
+            word_audio=self.word_audio,
+            audio_timeout=self.audio_timeout,
+        ).run()

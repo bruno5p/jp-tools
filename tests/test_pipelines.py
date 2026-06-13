@@ -1,4 +1,4 @@
-"""Integration tests for YoutubeTranscribePipeline."""
+"""Integration tests for PipelineYoutubeTranscribe and PipelineAnkiFromList."""
 
 import csv
 import sqlite3
@@ -34,18 +34,18 @@ def _make_segments(segments_dir: Path) -> dict[str, str]:
 
 
 def _make_pipeline(tmp_path, output_csv=None):
-    from jp_tools.pipelines.youtube_transcribe import YoutubeTranscribePipeline
+    from jp_tools.pipelines.pipeline_youtube import PipelineYoutubeTranscribe
 
     segments_dir = tmp_path / "segments"
     segments_dir.mkdir()
-    return YoutubeTranscribePipeline(
+    return PipelineYoutubeTranscribe(
         input_table=str(FIXTURES / "words.csv"),
         output_csv=str(output_csv or tmp_path / "output.csv"),
         segments_dir=str(segments_dir),
     ), segments_dir
 
 
-# class TestYoutubeTranscribePipeline:
+# class TestPipelineYoutubeTranscribe:
 #     def test_run_ok(self, tmp_path):
 #         pipeline, segments_dir = _make_pipeline(tmp_path)
 #         seg_paths = _make_segments(segments_dir)
@@ -59,13 +59,14 @@ def _make_pipeline(tmp_path, output_csv=None):
 
 #         pipeline.run()
 
+#         from jp_tools.pipelines.models import AnkiCardData
 #         df = pd.read_csv(pipeline.output_csv)
-#         assert list(df.columns) == ["video_url", "timestamp", "word", "sentence", "ref_audio_path", "status", "status_message"]
+#         assert list(df.columns) == list(AnkiCardData.model_fields.keys())
 #         assert len(df) == 2
 #         assert (df["status"] == "ok").all()
 #         assert df.loc[df["word"] == "忘れ物", "sentence"].iloc[0] == "ああ忘れ物しちゃったな"
 #         assert df.loc[df["word"] == "雑談", "sentence"].iloc[0] == "カジュアルな話カジュアルトークフリートーク雑談ですね"
-#         assert df["ref_audio_path"].str.endswith("_refined.mp3").all()
+#         assert df["sentence_audio_path"].str.endswith("_refined.mp3").all()
 
 #     def test_error_row_captured(self, tmp_path):
 #         pipeline, _ = _make_pipeline(tmp_path)
@@ -81,16 +82,17 @@ def _make_pipeline(tmp_path, output_csv=None):
 #         assert df["status_message"].str.contains("yt-dlp failed").all()
 
 #     def test_skips_ok_rows(self, tmp_path):
+#         from datetime import datetime
 #         output_csv = tmp_path / "output.csv"
 #         pipeline, segments_dir = _make_pipeline(tmp_path, output_csv)
 #         seg_paths = _make_segments(segments_dir)
 
 #         pd.DataFrame([{
-#             "video_url": "https://www.youtube.com/watch?v=67-fAdvRpSA",
-#             "timestamp": "13:38",
+#             "added_on": datetime.now().isoformat(),
 #             "word": "忘れ物",
 #             "sentence": "ああ忘れ物しちゃったな",
-#             "ref_audio_path": "/fake/refined.mp3",
+#             "sentence_audio_path": "/fake/refined.mp3",
+#             "source_metadata": '{"video_url": "https://www.youtube.com/watch?v=67-fAdvRpSA", "timestamp": "13:38"}',
 #             "status": "ok",
 #             "status_message": "",
 #         }]).to_csv(output_csv, index=False)
@@ -109,22 +111,29 @@ def _make_pipeline(tmp_path, output_csv=None):
 #         assert download_calls == ["5:40"]
 
 #     def test_reprocess_errors(self, tmp_path):
+#         from datetime import datetime
 #         output_csv = tmp_path / "output.csv"
 #         pipeline, segments_dir = _make_pipeline(tmp_path, output_csv)
 #         seg_paths = _make_segments(segments_dir)
 
 #         pd.DataFrame([
 #             {
-#                 "video_url": "https://www.youtube.com/watch?v=67-fAdvRpSA",
-#                 "timestamp": "13:38", "word": "忘れ物",
-#                 "sentence": "ああ忘れ物しちゃったな", "ref_audio_path": "/fake/refined.mp3",
-#                 "status": "ok", "status_message": "",
+#                 "added_on": datetime.now().isoformat(),
+#                 "word": "忘れ物",
+#                 "sentence": "ああ忘れ物しちゃったな",
+#                 "sentence_audio_path": "/fake/refined.mp3",
+#                 "source_metadata": '{"video_url": "https://www.youtube.com/watch?v=67-fAdvRpSA", "timestamp": "13:38"}',
+#                 "status": "ok",
+#                 "status_message": "",
 #             },
 #             {
-#                 "video_url": "https://www.youtube.com/watch?v=xI8EDxU4Q6g",
-#                 "timestamp": "5:40", "word": "雑談",
-#                 "sentence": "", "ref_audio_path": "",
-#                 "status": "error", "status_message": "network error",
+#                 "added_on": datetime.now().isoformat(),
+#                 "word": "雑談",
+#                 "sentence": "",
+#                 "sentence_audio_path": "",
+#                 "source_metadata": '{"video_url": "https://www.youtube.com/watch?v=xI8EDxU4Q6g", "timestamp": "5:40"}',
+#                 "status": "error",
+#                 "status_message": "network error",
 #             },
 #         ]).to_csv(output_csv, index=False)
 
@@ -158,7 +167,7 @@ def _apkg_note_count(apkg_path: Path, tmp_path: Path) -> int:
 class TestPipelineAnkiFromList:
     def test_run_creates_apkg_with_correct_card_count(self, tmp_path):
         from jp_tools.lookup import DictResult
-        from jp_tools.pipelines.pipeline_anki_list import PipelineAnkiFromList
+        from jp_tools.pipelines.pipeline_anki import PipelineAnkiFromList
 
         fixture_csv = FIXTURES / "anki_words_list.csv"
         with open(fixture_csv, encoding="utf-8") as f:

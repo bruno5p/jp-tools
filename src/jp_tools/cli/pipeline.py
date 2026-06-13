@@ -5,8 +5,8 @@ Word table → download → transcribe → refine → CSV.
 
 import argparse
 
-from ..pipelines import YoutubeTranscribePipeline
-from ..pipelines.youtube_transcribe import DEFAULT_ASR_MODEL
+from ..pipelines import PipelineYoutubeTranscribe
+from ..pipelines.pipeline_youtube import DEFAULT_ASR_MODEL
 
 
 def main() -> None:
@@ -30,7 +30,7 @@ def main() -> None:
                         help="Path to ffmpeg executable (auto-detected if omitted)")
     args = parser.parse_args()
 
-    YoutubeTranscribePipeline(
+    PipelineYoutubeTranscribe(
         args.input,
         output_csv=args.output,
         segments_dir=args.segments_dir,

@@ -10,15 +10,15 @@ from .pipelines import (  # noqa: E402
     AnkiCardData,
     Pipeline,
     PipelineAnkiFromList,
-    YoutubeCreateAnkiPipeline,
-    YoutubeTranscribePipeline,
+    PipelineYoutubeToAnki,
+    PipelineYoutubeTranscribe,
 )
 
 __all__ = [
     "__version__",
     "Pipeline",
     "AnkiCardData",
-    "YoutubeTranscribePipeline",
     "PipelineAnkiFromList",
-    "YoutubeCreateAnkiPipeline",
+    "PipelineYoutubeTranscribe",
+    "PipelineYoutubeToAnki",
 ]

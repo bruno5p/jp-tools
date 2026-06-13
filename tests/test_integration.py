@@ -53,7 +53,7 @@ def test_pipeline_anki_from_list():
     """End-to-end: CSV → .apkg using real dictionaries and real morphology (fugashi)."""
     import tempfile
 
-    from jp_tools.pipelines.pipeline_anki_list import PipelineAnkiFromList
+    from jp_tools.pipelines.pipeline_anki import PipelineAnkiFromList
 
     fixture_csv = FIXTURES / "anki_words_list.csv"
     with open(fixture_csv, encoding="utf-8") as f:

@@ -1,4 +1,4 @@
-"""PipelineAnkiFromList: AnkiCardData CSV → Anki deck (.apkg)."""
+"""Anki sink pipeline."""
 
 import csv
 import os

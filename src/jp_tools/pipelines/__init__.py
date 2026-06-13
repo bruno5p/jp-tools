@@ -9,14 +9,13 @@ export it below.
 
 from .base import Pipeline
 from .models import AnkiCardData
-from .pipeline_anki_list import PipelineAnkiFromList
-from .youtube_create_anki import YoutubeCreateAnkiPipeline
-from .youtube_transcribe import YoutubeTranscribePipeline
+from .pipeline_anki import PipelineAnkiFromList
+from .pipeline_youtube import PipelineYoutubeToAnki, PipelineYoutubeTranscribe
 
 __all__ = [
     "Pipeline",
     "AnkiCardData",
-    "YoutubeTranscribePipeline",
     "PipelineAnkiFromList",
-    "YoutubeCreateAnkiPipeline",
+    "PipelineYoutubeTranscribe",
+    "PipelineYoutubeToAnki",
 ]
