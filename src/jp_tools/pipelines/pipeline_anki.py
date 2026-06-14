@@ -70,6 +70,10 @@ class PipelineAnkiFromList(Pipeline):
                 print("  SKIP: empty word")
                 continue
 
+            if card.status == "skip":
+                print(f"  SKIP: {card.word} (already in Anki)")
+                continue
+
             try:
                 log = creator.add_word(
                     word=card.word,

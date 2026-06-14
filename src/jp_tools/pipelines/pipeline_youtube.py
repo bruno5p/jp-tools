@@ -7,7 +7,7 @@ from datetime import datetime
 
 import pandas as pd
 
-from .base import Pipeline
+from .base import FullPipeline, Pipeline
 from .models import AnkiCardData, YoutubeWordRow
 from ..table_readers import TableReader
 
@@ -226,10 +226,12 @@ class PipelineYoutubeTranscribe(Pipeline):
         return self.output_csv
 
 
-class PipelineYoutubeToAnki(Pipeline):
+class PipelineYoutubeToAnki(FullPipeline):
     """Build an Anki deck directly from a YouTube word table.
 
-    Chains :class:`PipelineYoutubeTranscribe` → :class:`PipelineAnkiFromList`.
+    Chains :class:`PipelineYoutubeTranscribe` → :class:`PipelineAnkiFromList`,
+    with optional filter, all-cards accumulation, and WordDex update steps
+    inherited from :class:`FullPipeline`.
     """
 
     def __init__(
@@ -251,7 +253,19 @@ class PipelineYoutubeToAnki(Pipeline):
         freqs: list[str] | None = None,
         word_audio: bool = True,
         audio_timeout: float = 10,
+        worddex_csv: str | None = None,
+        all_cards_csv: str | None = None,
+        filter_known: bool = True,
+        append_all_cards: bool = True,
+        update_worddex: bool = True,
     ):
+        super().__init__(
+            worddex_csv=worddex_csv,
+            all_cards_csv=all_cards_csv,
+            filter_known=filter_known,
+            append_all_cards=append_all_cards,
+            update_worddex=update_worddex,
+        )
         self.transcribe = PipelineYoutubeTranscribe(
             table_reader,
             output_csv=output_csv,
@@ -272,10 +286,12 @@ class PipelineYoutubeToAnki(Pipeline):
         self.word_audio = word_audio
         self.audio_timeout = audio_timeout
 
-    def run(self) -> str:
+    def _source_run(self) -> str:
+        return self.transcribe.run()
+
+    def _sink_run(self, csv_path: str) -> str:
         from .pipeline_anki import PipelineAnkiFromList
 
-        csv_path = self.transcribe.run()
         return PipelineAnkiFromList(
             csv_path,
             output=self.output,

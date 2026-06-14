@@ -1,4 +1,4 @@
-"""Integration tests for PipelineYoutubeTranscribe and PipelineAnkiFromList."""
+"""Tests for PipelineAnkiFromList, FullPipeline hooks, and PipelineYoutubeToAnki."""
 
 import csv
 import sqlite3
@@ -8,6 +8,8 @@ from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
+
+from jp_tools.pipelines.base import FullPipeline
 
 FIXTURES = Path(__file__).parent / "fixtures"
 INTEGRATION_DATA = Path(__file__).parent / "integration_data"
@@ -151,6 +153,62 @@ def _make_pipeline(tmp_path, output_csv=None):
 #         assert df.loc[df["word"] == "雑談", "sentence"].iloc[0] == "カジュアルな話カジュアルトークフリートーク雑談ですね"
 
 
+# ---- shared CSV helpers ----------------------------------------------------
+
+_CARD_FIELDS = [
+    "added_on", "word", "reading", "sentence", "word_audio_path",
+    "sentence_audio_path", "picture_path", "definition",
+    "definition_picture_path", "hint", "tags", "source_metadata",
+    "status", "status_message",
+]
+
+
+def _card_row(**overrides):
+    base = {f: "" for f in _CARD_FIELDS}
+    base["added_on"] = "2026-01-01T00:00:00"
+    base["status"] = "ok"
+    base.update(overrides)
+    return base
+
+
+def _write_card_csv(path, rows):
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=_CARD_FIELDS)
+        w.writeheader()
+        w.writerows(rows)
+
+
+def _write_worddex(path, entries):
+    """entries: {word: anki_word_flag} — flag 0 or 1 sets Anki (word)."""
+    df = pd.DataFrame(
+        {
+            "Learned": {w: flag for w, flag in entries.items()},
+            "Anki (word)": {w: flag for w, flag in entries.items()},
+            "Anki (sentence)": {w: 0 for w in entries},
+        }
+    )
+    df.index.name = "Word"
+    df.to_csv(path, encoding="utf-8-sig")
+
+
+# ---- FullPipeline test double ----------------------------------------------
+
+class _FakePipeline(FullPipeline):
+    """Minimal FullPipeline subclass for testing hooks in isolation."""
+
+    def __init__(self, src_csv, **kw):
+        super().__init__(**kw)
+        self._src = src_csv
+
+    def _source_run(self):
+        return self._src
+
+    def _sink_run(self, csv_path):
+        return "fake.apkg"
+
+
+# ---------------------------------------------------------------------------
+
 def _apkg_note_count(apkg_path: Path, tmp_path: Path) -> int:
     """Extract collection.anki2 from an .apkg and return the number of notes."""
     with zipfile.ZipFile(apkg_path) as zf:
@@ -219,3 +277,169 @@ class TestPipelineAnkiFromList:
             assert _apkg_note_count(output_apkg, tmp_path) == expected_cards
         finally:
             output_apkg.unlink(missing_ok=True)
+
+    def test_skip_rows_are_not_created(self, tmp_path):
+        """status='skip' rows must not produce Anki cards."""
+        from jp_tools.pipelines.pipeline_anki import PipelineAnkiFromList
+
+        csv_path = tmp_path / "words.csv"
+        _write_card_csv(csv_path, [
+            _card_row(word="taberu", status="ok"),
+            _card_row(word="suru", status="skip", status_message="already in Anki"),
+        ])
+
+        with patch("jp_tools.anki.creator.AnkiCardCreator") as MockCreator:
+            mock_instance = MockCreator.return_value
+            mock_instance.add_word.return_value = "added"
+            PipelineAnkiFromList(str(csv_path), output=str(tmp_path / "deck.apkg"), word_audio=False).run()
+
+        assert mock_instance.add_word.call_count == 1
+        assert mock_instance.add_word.call_args.kwargs["word"] == "taberu"
+
+
+class TestFullPipeline:
+    # -- construction validation --------------------------------------------
+
+    def test_init_raises_for_filter_without_worddex(self):
+        with pytest.raises(ValueError, match="worddex_csv"):
+            _FakePipeline("x.csv", filter_known=True, append_all_cards=False, update_worddex=False)
+
+    def test_init_raises_for_update_without_worddex(self):
+        with pytest.raises(ValueError, match="worddex_csv"):
+            _FakePipeline("x.csv", filter_known=False, append_all_cards=False, update_worddex=True)
+
+    def test_init_raises_for_append_without_all_cards_csv(self):
+        with pytest.raises(ValueError, match="all_cards_csv"):
+            _FakePipeline("x.csv", filter_known=False, append_all_cards=True, update_worddex=False)
+
+    def test_init_all_disabled_requires_no_paths(self):
+        p = _FakePipeline("x.csv", filter_known=False, append_all_cards=False, update_worddex=False)
+        assert isinstance(p, FullPipeline)
+
+    # -- _filter_csv --------------------------------------------------------
+
+    def test_filter_csv_marks_known_words_as_skip(self, tmp_path):
+        worddex = tmp_path / "worddex.csv"
+        src = tmp_path / "output.csv"
+        _write_worddex(worddex, {"suru": 1, "taberu": 0})
+        _write_card_csv(src, [
+            _card_row(word="suru"),
+            _card_row(word="taberu"),
+            _card_row(word="hashiru"),  # not in worddex at all
+        ])
+
+        p = _FakePipeline(str(src), worddex_csv=str(worddex), filter_known=True, append_all_cards=False, update_worddex=False)
+        filtered = p._filter_csv(str(src))
+        df = pd.read_csv(filtered)
+
+        assert df.loc[df["word"] == "suru", "status"].iloc[0] == "skip"
+        assert df.loc[df["word"] == "taberu", "status"].iloc[0] == "ok"
+        assert df.loc[df["word"] == "hashiru", "status"].iloc[0] == "ok"
+
+    def test_filter_csv_leaves_original_unchanged(self, tmp_path):
+        worddex = tmp_path / "worddex.csv"
+        src = tmp_path / "output.csv"
+        _write_worddex(worddex, {"suru": 1})
+        _write_card_csv(src, [_card_row(word="suru")])
+        original = src.read_text(encoding="utf-8")
+
+        p = _FakePipeline(str(src), worddex_csv=str(worddex), filter_known=True, append_all_cards=False, update_worddex=False)
+        p._filter_csv(str(src))
+
+        assert src.read_text(encoding="utf-8") == original
+
+    def test_filter_csv_returns_filtered_path(self, tmp_path):
+        worddex = tmp_path / "worddex.csv"
+        src = tmp_path / "output.csv"
+        _write_worddex(worddex, {})
+        _write_card_csv(src, [_card_row(word="suru")])
+
+        p = _FakePipeline(str(src), worddex_csv=str(worddex), filter_known=True, append_all_cards=False, update_worddex=False)
+        filtered = p._filter_csv(str(src))
+
+        assert filtered == str(tmp_path / "output_filtered.csv")
+
+    # -- _do_append_all_cards -----------------------------------------------
+
+    def test_append_all_cards_only_includes_ok_rows(self, tmp_path):
+        src = tmp_path / "cards.csv"
+        all_cards = tmp_path / "all.csv"
+        _write_card_csv(src, [
+            _card_row(word="taberu", status="ok"),
+            _card_row(word="suru", status="error"),
+            _card_row(word="hashiru", status="skip"),
+        ])
+
+        p = _FakePipeline(str(src), filter_known=False, append_all_cards=True, update_worddex=False, all_cards_csv=str(all_cards))
+        p._do_append_all_cards(str(src))
+
+        df = pd.read_csv(all_cards)
+        assert list(df["word"]) == ["taberu"]
+
+    def test_append_all_cards_deduplicates_on_second_run(self, tmp_path):
+        src = tmp_path / "cards.csv"
+        all_cards = tmp_path / "all.csv"
+        _write_card_csv(src, [_card_row(word="taberu")])
+
+        p = _FakePipeline(str(src), filter_known=False, append_all_cards=True, update_worddex=False, all_cards_csv=str(all_cards))
+        p._do_append_all_cards(str(src))
+        p._do_append_all_cards(str(src))
+
+        df = pd.read_csv(all_cards)
+        assert len(df) == 1
+
+    # -- _do_update_worddex -------------------------------------------------
+
+    def test_update_worddex_sets_anki_flags_for_ok_rows(self, tmp_path):
+        worddex = tmp_path / "worddex.csv"
+        src = tmp_path / "cards.csv"
+        _write_worddex(worddex, {"taberu": 0, "suru": 0})
+        _write_card_csv(src, [
+            _card_row(word="taberu", status="ok"),
+            _card_row(word="suru", status="error"),
+        ])
+
+        p = _FakePipeline(str(src), worddex_csv=str(worddex), filter_known=False, append_all_cards=False, update_worddex=True)
+        p._do_update_worddex(str(src))
+
+        wdx = pd.read_csv(worddex, index_col=0)
+        assert wdx.loc["taberu", "Anki (word)"] == 1
+        assert wdx.loc["taberu", "Anki (sentence)"] == 1
+        assert wdx.loc["suru", "Anki (word)"] == 0   # error row — not updated
+
+    def test_update_worddex_silently_ignores_missing_words(self, tmp_path):
+        worddex = tmp_path / "worddex.csv"
+        src = tmp_path / "cards.csv"
+        _write_worddex(worddex, {})
+        _write_card_csv(src, [_card_row(word="taberu")])
+
+        p = _FakePipeline(str(src), worddex_csv=str(worddex), filter_known=False, append_all_cards=False, update_worddex=True)
+        p._do_update_worddex(str(src))  # must not raise
+
+    # -- run() orchestration ------------------------------------------------
+
+    def test_run_full_flow(self, tmp_path):
+        worddex = tmp_path / "worddex.csv"
+        all_cards = tmp_path / "all.csv"
+        src = tmp_path / "output.csv"
+        _write_worddex(worddex, {"suru": 1, "taberu": 0})
+        _write_card_csv(src, [_card_row(word="suru"), _card_row(word="taberu")])
+
+        p = _FakePipeline(str(src), worddex_csv=str(worddex), all_cards_csv=str(all_cards))
+        result = p.run()
+
+        assert result == "fake.apkg"
+
+        # filter wrote a _filtered.csv; suru is skipped there
+        filtered = pd.read_csv(tmp_path / "output_filtered.csv")
+        assert filtered.loc[filtered["word"] == "suru", "status"].iloc[0] == "skip"
+        assert filtered.loc[filtered["word"] == "taberu", "status"].iloc[0] == "ok"
+
+        # all-cards only has taberu (the ok row from the filtered CSV)
+        ac = pd.read_csv(all_cards)
+        assert list(ac["word"]) == ["taberu"]
+
+        # worddex updated for taberu only
+        wdx = pd.read_csv(worddex, index_col=0)
+        assert wdx.loc["taberu", "Anki (word)"] == 1
+        assert wdx.loc["suru", "Anki (word)"] == 1   # was already 1

@@ -7,13 +7,14 @@ To add a new pipeline, create a module here with a ``Pipeline`` subclass and
 export it below.
 """
 
-from .base import Pipeline
+from .base import FullPipeline, Pipeline
 from .models import AnkiCardData, YoutubeWordRow
 from .pipeline_anki import PipelineAnkiFromList
 from .pipeline_youtube import PipelineYoutubeToAnki, PipelineYoutubeTranscribe
 
 __all__ = [
     "Pipeline",
+    "FullPipeline",
     "AnkiCardData",
     "YoutubeWordRow",
     "PipelineAnkiFromList",

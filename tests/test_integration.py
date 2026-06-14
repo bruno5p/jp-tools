@@ -86,6 +86,7 @@ def test_pipeline_youtube_transcribe():
     """Word table → download → transcribe → refine → AnkiCardData CSV."""
     from jp_tools.pipelines.models import AnkiCardData
     from jp_tools.pipelines.pipeline_youtube import PipelineYoutubeTranscribe
+    from jp_tools.table_readers import CsvTableReader
 
     INTEGRATION_DATA.mkdir(exist_ok=True)
     segments_dir = INTEGRATION_DATA / "segments"
@@ -93,7 +94,7 @@ def test_pipeline_youtube_transcribe():
     output_csv = INTEGRATION_DATA / "output.csv"
 
     pipeline = PipelineYoutubeTranscribe(
-        input_table=str(FIXTURES / "words.csv"),
+        CsvTableReader(str(FIXTURES / "words.csv")),
         output_csv=str(output_csv),
         segments_dir=str(segments_dir),
         interval=8,
@@ -116,6 +117,7 @@ def test_pipeline_youtube_transcribe():
 def test_pipeline_youtube_to_anki():
     """Word table → download → transcribe → refine → .apkg end-to-end."""
     from jp_tools.pipelines.pipeline_youtube import PipelineYoutubeToAnki
+    from jp_tools.table_readers import CsvTableReader
 
     INTEGRATION_DATA.mkdir(exist_ok=True)
     segments_dir = INTEGRATION_DATA / "segments"
@@ -123,11 +125,14 @@ def test_pipeline_youtube_to_anki():
     output_apkg = INTEGRATION_DATA / "youtube_deck.apkg"
 
     pipeline = PipelineYoutubeToAnki(
-        input_table=str(FIXTURES / "words.csv"),
+        CsvTableReader(str(FIXTURES / "words.csv")),
         output=str(output_apkg),
         output_csv=str(INTEGRATION_DATA / "output.csv"),
         segments_dir=str(segments_dir),
         interval=8,
+        filter_known=False,
+        append_all_cards=False,
+        update_worddex=False,
     )
     result = pipeline.run()
 

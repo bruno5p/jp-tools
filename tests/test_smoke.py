@@ -41,26 +41,35 @@ def test_top_level_imports():
     assert jp_tools.__version__
 
     from jp_tools.pipelines import (
-        ListCreateAnkiPipeline,
+        FullPipeline,
         Pipeline,
-        YoutubeCreateAnkiPipeline,
-        YoutubeTranscribePipeline,
+        PipelineAnkiFromList,
+        PipelineYoutubeToAnki,
+        PipelineYoutubeTranscribe,
     )
-    assert issubclass(YoutubeTranscribePipeline, Pipeline)
-    assert issubclass(ListCreateAnkiPipeline, Pipeline)
-    assert issubclass(YoutubeCreateAnkiPipeline, Pipeline)
+    assert issubclass(PipelineYoutubeTranscribe, Pipeline)
+    assert issubclass(PipelineAnkiFromList, Pipeline)
+    assert issubclass(PipelineYoutubeToAnki, FullPipeline)
+    assert issubclass(PipelineYoutubeToAnki, Pipeline)
 
 
 def test_pipeline_construction_no_run():
     """Pipelines construct without importing heavy deps or doing I/O."""
     from jp_tools.pipelines import (
-        ListCreateAnkiPipeline,
-        YoutubeCreateAnkiPipeline,
-        YoutubeTranscribePipeline,
+        PipelineAnkiFromList,
+        PipelineYoutubeToAnki,
+        PipelineYoutubeTranscribe,
     )
-    YoutubeTranscribePipeline(str(WORDS_CSV))
-    ListCreateAnkiPipeline(str(WORDS_CSV))
-    YoutubeCreateAnkiPipeline(str(WORDS_CSV))
+    from jp_tools.table_readers import CsvTableReader
+
+    PipelineYoutubeTranscribe(CsvTableReader(str(WORDS_CSV)))
+    PipelineAnkiFromList(str(WORDS_CSV))
+    PipelineYoutubeToAnki(
+        CsvTableReader(str(WORDS_CSV)),
+        filter_known=False,
+        append_all_cards=False,
+        update_worddex=False,
+    )
 
 
 # --- yomitan deinflection: pure Python, no heavy deps -----------------------
