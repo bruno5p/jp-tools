@@ -7,6 +7,7 @@ import argparse
 
 from ..pipelines import PipelineYoutubeTranscribe
 from ..pipelines.pipeline_youtube import DEFAULT_ASR_MODEL
+from ..table_readers import CsvTableReader
 
 
 def main() -> None:
@@ -31,7 +32,7 @@ def main() -> None:
     args = parser.parse_args()
 
     PipelineYoutubeTranscribe(
-        args.input,
+        CsvTableReader(args.input),
         output_csv=args.output,
         segments_dir=args.segments_dir,
         interval=args.interval,

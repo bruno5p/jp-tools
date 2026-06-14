@@ -8,13 +8,14 @@ export it below.
 """
 
 from .base import Pipeline
-from .models import AnkiCardData
+from .models import AnkiCardData, YoutubeWordRow
 from .pipeline_anki import PipelineAnkiFromList
 from .pipeline_youtube import PipelineYoutubeToAnki, PipelineYoutubeTranscribe
 
 __all__ = [
     "Pipeline",
     "AnkiCardData",
+    "YoutubeWordRow",
     "PipelineAnkiFromList",
     "PipelineYoutubeTranscribe",
     "PipelineYoutubeToAnki",

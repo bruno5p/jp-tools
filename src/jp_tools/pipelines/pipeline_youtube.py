@@ -8,7 +8,8 @@ from datetime import datetime
 import pandas as pd
 
 from .base import Pipeline
-from .models import AnkiCardData
+from .models import AnkiCardData, YoutubeWordRow
+from ..table_readers import TableReader
 
 DEFAULT_ASR_MODEL = "kotoba-tech/kotoba-whisper-v2.2"
 _PADDING = 0.25
@@ -20,7 +21,7 @@ class PipelineYoutubeTranscribe(Pipeline):
 
     def __init__(
         self,
-        input_table: str,
+        table_reader: TableReader,
         output_csv: str = "output.csv",
         segments_dir: str = "segments",
         interval: float = 8,
@@ -29,7 +30,7 @@ class PipelineYoutubeTranscribe(Pipeline):
         model: str = DEFAULT_ASR_MODEL,
         device: str | None = None,
     ):
-        self.input_table = input_table
+        self.table_reader = table_reader
         self.output_csv = output_csv
         self.segments_dir = segments_dir
         self.interval = interval
@@ -120,23 +121,21 @@ class PipelineYoutubeTranscribe(Pipeline):
                 return text
         return max(entries, key=len) if entries else ""
 
-    def _process_row(self, row) -> dict:
-        url = str(row["video_url"]).strip()
-        timestamp = str(row["timestamp"]).strip()
-        word = str(row["word"]).strip()
-        source_meta = json.dumps({"video_url": url, "timestamp": timestamp})
+    def _process_row(self, row: YoutubeWordRow) -> dict:
+        source_meta = json.dumps({"video_url": row.video_url, "timestamp": row.timestamp})
         try:
-            mp3_path = self._download_segment(url, timestamp)
+            mp3_path = self._download_segment(row.video_url, row.timestamp)
             srt_path = self._transcribe(mp3_path)
             refined_path = self._refine(mp3_path)
             sentence = (
-                self._sentence_from_srt(srt_path, word)
+                self._sentence_from_srt(srt_path, row.word)
                 if os.path.exists(srt_path)
                 else ""
             )
             return AnkiCardData(
                 added_on=datetime.now(),
-                word=word,
+                word=row.word,
+                hint=row.hint or None,
                 sentence=sentence or None,
                 sentence_audio_path=os.path.abspath(refined_path)
                 if os.path.exists(refined_path)
@@ -147,7 +146,8 @@ class PipelineYoutubeTranscribe(Pipeline):
         except Exception as e:
             return AnkiCardData(
                 added_on=datetime.now(),
-                word=word,
+                word=row.word,
+                hint=row.hint or None,
                 source_metadata=source_meta,
                 status="error",
                 status_message=str(e),
@@ -156,7 +156,7 @@ class PipelineYoutubeTranscribe(Pipeline):
     # -- public interface -----------------------------------------------------
 
     def run(self) -> str:
-        df = pd.read_csv(self.input_table)
+        rows = YoutubeWordRow.from_df(self.table_reader.read())
         done: set[tuple[str, str]] = set()
         results: list[dict] = []
 
@@ -180,12 +180,12 @@ class PipelineYoutubeTranscribe(Pipeline):
                 )
                 results.append({col: r.get(col, "") for col in _OUTPUT_COLS})
 
-        for _, row in df.iterrows():
-            key = (str(row["video_url"]).strip(), str(row["timestamp"]).strip())
+        for row in rows:
+            key = (row.video_url, row.timestamp)
             if key in done:
-                print(f"  [skip] {row.get('word', '')} @ {row['timestamp']}")
+                print(f"  [skip] {row.word} @ {row.timestamp}")
                 continue
-            print(f"\n→ {row.get('word', '')}  @  {row['timestamp']}")
+            print(f"\n→ {row.word}  @  {row.timestamp}")
             results.append(self._process_row(row))
 
         out_df = pd.DataFrame(results, columns=_OUTPUT_COLS)
@@ -211,10 +211,13 @@ class PipelineYoutubeTranscribe(Pipeline):
                 meta = json.loads(row.get("source_metadata", "") or "")
             except (json.JSONDecodeError, ValueError):
                 meta = {}
-            process_row = dict(row)
-            process_row["video_url"] = meta.get("video_url", "")
-            process_row["timestamp"] = meta.get("timestamp", "")
-            result = self._process_row(process_row)
+            word_row = YoutubeWordRow(
+                video_url=meta.get("video_url", ""),
+                word=str(row.get("word", "")),
+                timestamp=meta.get("timestamp", ""),
+                hint=str(row.get("hint", "") or ""),
+            )
+            result = self._process_row(word_row)
             for col, val in result.items():
                 if col in existing.columns:
                     existing.at[idx, col] = val
@@ -231,7 +234,7 @@ class PipelineYoutubeToAnki(Pipeline):
 
     def __init__(
         self,
-        input_table: str,
+        table_reader: TableReader,
         output: str = "deck.apkg",
         deck_name: str = "Japanese Mining",
         output_csv: str = "output.csv",
@@ -250,7 +253,7 @@ class PipelineYoutubeToAnki(Pipeline):
         audio_timeout: float = 10,
     ):
         self.transcribe = PipelineYoutubeTranscribe(
-            input_table,
+            table_reader,
             output_csv=output_csv,
             segments_dir=segments_dir,
             interval=interval,
