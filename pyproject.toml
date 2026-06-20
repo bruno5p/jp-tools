@@ -36,6 +36,7 @@ dev = [
 jp-pipeline     = "jp_tools.cli.pipeline:main"
 jp-anki         = "jp_tools.cli.anki:main"
 jp-youtube-anki = "jp_tools.cli.youtube_anki:main"
+jp-config       = "jp_tools.cli.config_cmd:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/jp_tools"]
