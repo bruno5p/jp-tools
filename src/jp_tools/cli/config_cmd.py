@@ -12,16 +12,10 @@ word_audio    = true
 audio_timeout = 10
 
 [dicts]
-daijirin = "dicts/daijirin"
-daijisen = "dicts/daijisen"
-jmdict   = "dicts/jmdict_english"
-pitch    = "dicts/pitch_daijisen"
-freq     = [
-    "dicts/jpdb_freq",
-    "dicts/anime_drama_freq_list",
-    "dicts/innocent_ranked",
-    "dicts/SoL Top 100",
-]
+dir        = "dicts"
+names      = ["daijirin", "daijisen", "jmdict_english"]
+pitch_name = "pitch_daijisen"
+freq_names = ["jpdb_freq", "anime_drama_freq_list", "innocent_ranked", "SoL Top 100"]
 
 [pipeline]
 output       = "output.csv"

@@ -3,31 +3,23 @@ import os
 import re
 import sys
 import tempfile
+from pathlib import Path
+
 import genanki
 from dataclasses import dataclass
 from ._lapis_template import CARD_CSS, RECOGNITION_AFMT, RECOGNITION_QFMT
 from ..lookup import DictResult
 from .._paths import DEFAULT_DICTS_DIR
-
-
-# Frequency lists shown on each card, in display order. Each is a folder of
-# extracted Yomitan frequency banks under dicts/; missing ones are skipped.
-_DEFAULT_FREQ_DIRS = (
-    "jpdb_freq",
-    "anime_drama_freq_list",
-    "innocent_ranked",
-    "SoL Top 100",
+from ..config import (
+    ANKI_MODEL_ID,
+    DEFAULT_DICT_NAMES,
+    DEFAULT_FREQ_NAMES,
+    DEFAULT_PITCH_NAME,
 )
 
 
-# This ID was the original value chosen to match the "Lapis" note type already
-# present in the target Anki collection.  Do not change it without also
-# migrating existing notes.
-_MODEL_ID = 1667218449922
-
-
 _MODEL = genanki.Model(
-    _MODEL_ID,
+    ANKI_MODEL_ID,
     "Lapis",
     fields=[
         {"name": "Expression"},
@@ -91,11 +83,10 @@ class AnkiCardCreator:
     def __init__(
         self,
         deck_name: str = "Test",
-        daijirin: str | None = None,
-        daijisen: str | None = None,
-        jmdict: str | None = None,
-        pitch: str | None = None,
-        freqs: list[str] | None = None,
+        dicts_dir: str | None = None,
+        dict_names: list[str] | None = None,
+        pitch_name: str | None = None,
+        freq_names: list[str] | None = None,
         word_audio: bool = True,
         audio_sources=None,
         audio_timeout: float = 10,
@@ -103,13 +94,12 @@ class AnkiCardCreator:
         deck_id = self._stable_id(f"jp-tools:deck:{deck_name}")
         self._deck = genanki.Deck(deck_id, deck_name)
         self._media: list[str] = []
-        self._daijirin = daijirin or str(DEFAULT_DICTS_DIR / "daijirin")
-        self._daijisen = daijisen or str(DEFAULT_DICTS_DIR / "daijisen")
-        self._jmdict = jmdict or str(DEFAULT_DICTS_DIR / "jmdict_english")
-        self._pitch = pitch or str(DEFAULT_DICTS_DIR / "pitch_daijisen")
-        self._freqs = freqs or [
-            str(DEFAULT_DICTS_DIR / name) for name in _DEFAULT_FREQ_DIRS
-        ]
+
+        base = Path(dicts_dir) if dicts_dir else DEFAULT_DICTS_DIR
+        self._def_dirs = [str(base / n) for n in (dict_names or DEFAULT_DICT_NAMES)]
+        self._pitch = str(base / (pitch_name or DEFAULT_PITCH_NAME))
+        self._freqs = [str(base / n) for n in (freq_names or DEFAULT_FREQ_NAMES)]
+
         self._dict_set = None
         self._word_audio = word_audio
         self._audio_sources = audio_sources
@@ -129,15 +119,11 @@ class AnkiCardCreator:
     def _load_dicts(self):
         from ..lookup import get_dict
 
-        def_dirs = [
-            p
-            for p in [self._daijirin, self._daijisen, self._jmdict]
-            if os.path.isdir(p)
-        ]
+        def_dirs = [p for p in self._def_dirs if os.path.isdir(p)]
         if not def_dirs:
             raise FileNotFoundError(
-                f"No definition dictionaries found in {DEFAULT_DICTS_DIR}.\n"
-                "  Expected folders: daijirin/, daijisen/, or jmdict_english/"
+                f"No definition dictionaries found. Looked in:\n"
+                + "\n".join(f"  {p}" for p in self._def_dirs)
             )
         self._dict_set = get_dict(
             def_dirs,

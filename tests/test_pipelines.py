@@ -267,7 +267,8 @@ class TestPipelineAnkiFromList:
                 pipeline = PipelineAnkiFromList(
                     csv_path=str(fixture_csv),
                     output=str(output_apkg),
-                    jmdict=str(fake_jmdict),
+                    dicts_dir=str(tmp_path),
+                    dict_names=["jmdict"],
                     word_audio=False,  # keep the test offline / network-free
                 )
                 result = pipeline.run()

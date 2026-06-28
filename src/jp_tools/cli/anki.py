@@ -6,7 +6,14 @@ CSV (word/sentence/audio) → Anki deck (.apkg).
 import argparse
 from pathlib import Path
 
-from ..config import load_config, resolve_anki, resolve_dicts
+from ..config import (
+    DEFAULT_DICT_NAMES,
+    DEFAULT_FREQ_NAMES,
+    DEFAULT_PITCH_NAME,
+    load_config,
+    resolve_anki,
+    resolve_dicts,
+)
 from ..pipelines import PipelineAnkiFromList
 
 
@@ -21,18 +28,16 @@ def main() -> None:
                         help="Output .apkg path (default: deck.apkg)")
     parser.add_argument("--deck", "-d", default=None,
                         help="Anki deck name (default: Japanese Mining)")
-    parser.add_argument("--daijirin", default=None, metavar="DIR",
-                        help="三省堂スーパー大辞林 folder (default: dicts/daijirin)")
-    parser.add_argument("--daijisen", default=None, metavar="DIR",
-                        help="大辞泉 folder (default: dicts/daijisen)")
-    parser.add_argument("--jmdict", default=None, metavar="DIR",
-                        help="JMdict English folder fallback (default: dicts/jmdict_english)")
-    parser.add_argument("--pitch", default=None, metavar="DIR",
-                        help="Pitch accent folder (default: dicts/pitch_daijisen)")
-    parser.add_argument("--freq", nargs="*", default=None, metavar="DIR",
-                        help="Frequency list folders shown on each card (default: "
-                             "dicts/jpdb_freq, anime_drama_freq_list, innocent_ranked, "
-                             "'SoL Top 100')")
+    parser.add_argument("--dicts-dir", default=None, metavar="DIR",
+                        help="Base directory containing all dict folders (default: dicts/)")
+    parser.add_argument("--dict-names", nargs="*", default=None, metavar="NAME",
+                        help="Definition dict folder names in priority order "
+                             f"(default: {' '.join(DEFAULT_DICT_NAMES)})")
+    parser.add_argument("--pitch-name", default=None, metavar="NAME",
+                        help=f"Pitch accent dict folder name (default: {DEFAULT_PITCH_NAME})")
+    parser.add_argument("--freq-names", nargs="*", default=None, metavar="NAME",
+                        help="Frequency list folder names "
+                             f"(default: {' '.join(DEFAULT_FREQ_NAMES)})")
     parser.add_argument("--no-word-audio", dest="word_audio", action="store_false",
                         default=None,
                         help="Disable automatic word-audio fetching (Yomitan-style: "
@@ -49,11 +54,10 @@ def main() -> None:
         args.csv,
         output=anki["output"],
         deck_name=anki["deck_name"],
-        daijirin=dicts["daijirin"],
-        daijisen=dicts["daijisen"],
-        jmdict=dicts["jmdict"],
-        pitch=dicts["pitch"],
-        freqs=dicts["freqs"],
+        dicts_dir=dicts["dicts_dir"],
+        dict_names=dicts["dict_names"],
+        pitch_name=dicts["pitch_name"],
+        freq_names=dicts["freq_names"],
         word_audio=anki["word_audio"],
         audio_timeout=anki["audio_timeout"],
     ).run()

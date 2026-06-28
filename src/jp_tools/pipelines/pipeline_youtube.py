@@ -246,11 +246,10 @@ class PipelineYoutubeToAnki(FullPipeline):
         ffmpeg: str | None = None,
         model: str = DEFAULT_ASR_MODEL,
         device: str | None = None,
-        daijirin: str | None = None,
-        daijisen: str | None = None,
-        jmdict: str | None = None,
-        pitch: str | None = None,
-        freqs: list[str] | None = None,
+        dicts_dir: str | None = None,
+        dict_names: list[str] | None = None,
+        pitch_name: str | None = None,
+        freq_names: list[str] | None = None,
         word_audio: bool = True,
         audio_timeout: float = 10,
         worddex_csv: str | None = None,
@@ -278,11 +277,10 @@ class PipelineYoutubeToAnki(FullPipeline):
         )
         self.output = output
         self.deck_name = deck_name
-        self.daijirin = daijirin
-        self.daijisen = daijisen
-        self.jmdict = jmdict
-        self.pitch = pitch
-        self.freqs = freqs
+        self.dicts_dir = dicts_dir
+        self.dict_names = dict_names
+        self.pitch_name = pitch_name
+        self.freq_names = freq_names
         self.word_audio = word_audio
         self.audio_timeout = audio_timeout
 
@@ -296,11 +294,10 @@ class PipelineYoutubeToAnki(FullPipeline):
             csv_path,
             output=self.output,
             deck_name=self.deck_name,
-            daijirin=self.daijirin,
-            daijisen=self.daijisen,
-            jmdict=self.jmdict,
-            pitch=self.pitch,
-            freqs=self.freqs,
+            dicts_dir=self.dicts_dir,
+            dict_names=self.dict_names,
+            pitch_name=self.pitch_name,
+            freq_names=self.freq_names,
             word_audio=self.word_audio,
             audio_timeout=self.audio_timeout,
         ).run()

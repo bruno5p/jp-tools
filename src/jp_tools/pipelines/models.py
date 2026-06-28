@@ -36,7 +36,7 @@ class YoutubeWordRow(BaseModel):
     video_url: str
     word: str
     timestamp: str
-    hint: str = ""
+    hint: str | None = None
 
     @field_validator("video_url")
     @classmethod
@@ -54,4 +54,6 @@ class YoutubeWordRow(BaseModel):
 
     @classmethod
     def from_df(cls, df: pd.DataFrame) -> list["YoutubeWordRow"]:
-        return [cls.model_validate(row) for row in df.to_dict("records")]
+        # astype(object) ensures NaN cells become Python None (not float nan) in the dict
+        rows = df.astype(object).where(pd.notna(df), None).to_dict("records")
+        return [cls.model_validate(row) for row in rows]

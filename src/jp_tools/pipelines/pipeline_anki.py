@@ -15,22 +15,20 @@ class PipelineAnkiFromList(Pipeline):
         csv_path: str,
         output: str = "deck.apkg",
         deck_name: str = "Test",
-        daijirin: str | None = None,
-        daijisen: str | None = None,
-        jmdict: str | None = None,
-        pitch: str | None = None,
-        freqs: list[str] | None = None,
+        dicts_dir: str | None = None,
+        dict_names: list[str] | None = None,
+        pitch_name: str | None = None,
+        freq_names: list[str] | None = None,
         word_audio: bool = True,
         audio_timeout: float = 10,
     ):
         self.csv_path = csv_path
         self.output = output
         self.deck_name = deck_name
-        self._daijirin = daijirin
-        self._daijisen = daijisen
-        self._jmdict = jmdict
-        self._pitch = pitch
-        self._freqs = freqs
+        self._dicts_dir = dicts_dir
+        self._dict_names = dict_names
+        self._pitch_name = pitch_name
+        self._freq_names = freq_names
         self._word_audio = word_audio
         self._audio_timeout = audio_timeout
 
@@ -42,11 +40,10 @@ class PipelineAnkiFromList(Pipeline):
 
         creator = AnkiCardCreator(
             deck_name=self.deck_name,
-            daijirin=self._daijirin,
-            daijisen=self._daijisen,
-            jmdict=self._jmdict,
-            pitch=self._pitch,
-            freqs=self._freqs,
+            dicts_dir=self._dicts_dir,
+            dict_names=self._dict_names,
+            pitch_name=self._pitch_name,
+            freq_names=self._freq_names,
             word_audio=self._word_audio,
             audio_timeout=self._audio_timeout,
         )

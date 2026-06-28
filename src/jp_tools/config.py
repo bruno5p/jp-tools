@@ -12,7 +12,26 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-# --- Built-in scalar defaults ---
+# --- Public constants (shared with creator.py) ---
+
+# This ID was the original value chosen to match the "Lapis" note type already
+# present in the target Anki collection.  Do not change it without also
+# migrating existing notes.
+ANKI_MODEL_ID = 1667218449922
+
+# Frequency lists shown on each card, in display order.
+DEFAULT_FREQ_NAMES: tuple[str, ...] = (
+    "jpdb_freq",
+    "anime_drama_freq_list",
+    "innocent_ranked",
+    "SoL Top 100",
+)
+
+# Definition dictionaries tried in order; first folder(s) found are used.
+DEFAULT_DICT_NAMES: tuple[str, ...] = ("daijirin", "daijisen", "jmdict_english")
+DEFAULT_PITCH_NAME = "pitch_daijisen"
+
+# --- Private scalar defaults ---
 _DEFAULT_DECK_NAME = "Japanese Mining"
 _DEFAULT_ANKI_OUTPUT = "deck.apkg"
 _DEFAULT_WORD_AUDIO = True
@@ -44,11 +63,10 @@ class AnkiConfig(BaseModel):
 
 
 class DictsConfig(BaseModel):
-    daijirin: str | None = None
-    daijisen: str | None = None
-    jmdict: str | None = None
-    pitch: str | None = None
-    freq: list[str] | None = None
+    dir: str | None = None
+    names: list[str] | None = None
+    pitch_name: str | None = None
+    freq_names: list[str] | None = None
 
 
 class PipelineConfig(BaseModel):
@@ -135,13 +153,12 @@ def resolve_anki(args, cfg: JpToolsConfig) -> dict:
 
 
 def resolve_dicts(args, cfg: JpToolsConfig) -> dict:
-    # Leave paths as None when unset — AnkiCardCreator resolves them via DEFAULT_DICTS_DIR
+    # Leave as None when unset — AnkiCardCreator applies DEFAULT_DICT_NAMES / DEFAULT_DICTS_DIR
     return {
-        "daijirin": _first(getattr(args, "daijirin", None), cfg.dicts.daijirin),
-        "daijisen": _first(getattr(args, "daijisen", None), cfg.dicts.daijisen),
-        "jmdict": _first(getattr(args, "jmdict", None), cfg.dicts.jmdict),
-        "pitch": _first(getattr(args, "pitch", None), cfg.dicts.pitch),
-        "freqs": _first(getattr(args, "freq", None), cfg.dicts.freq),
+        "dicts_dir": _first(getattr(args, "dicts_dir", None), cfg.dicts.dir),
+        "dict_names": _first(getattr(args, "dict_names", None), cfg.dicts.names),
+        "pitch_name": _first(getattr(args, "pitch_name", None), cfg.dicts.pitch_name),
+        "freq_names": _first(getattr(args, "freq_names", None), cfg.dicts.freq_names),
     }
 
 
